@@ -507,6 +507,19 @@ def literature():
 # Claude call with automatic retry on malformed JSON
 # ──────────────────────────────────────────────────────────────────────────
 
+# Source tags the model sometimes writes inline in prose — "...in systemic
+# regimens [S5]" — instead of putting them in the claim's "source" field. Two
+# things then go wrong: the tag renders literally in the report, and the paper it
+# points at is not counted as cited, so the cited-works filter drops it from
+# References and the tag dangles. Both are handled by parsing them out.
+_INLINE_TAG_RE = re.compile(r"[\[(]\s*([SM]\d{1,2})\s*[\])]")
+
+
+def _inline_tags(text):
+    """Source tags the model embedded directly in claim prose."""
+    return {m.upper() for m in _INLINE_TAG_RE.findall(text or "")}
+
+
 def _collect_cited_tags(design):
     """
     Returns the set of source tags (S1, M2, ...) the model actually cited anywhere
@@ -523,6 +536,9 @@ def _collect_cited_tags(design):
                 for t in re.split(r"[,\s;]+", src.strip()):
                     if t:
                         tags.add(t.upper())
+            # A tag written inline in the prose is still a citation. Missing these
+            # would filter the paper out of References and leave the tag dangling.
+            tags.update(_inline_tags(claim.get("text")))
 
     for v in (design.get("composition") or {}).values():
         take(v)
@@ -1174,6 +1190,22 @@ def _claim_to_html(claim, sources=None):
     text = (claim.get("text") or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     provenance = claim.get("provenance")
     source = claim.get("source")
+
+    # Convert any tag the model wrote inline in the prose into a proper
+    # superscript, so "[S5]" reads as a citation rather than as debug output. A
+    # tag that resolves to nothing is removed outright — a dangling marker is
+    # worse than no marker, because it implies a source the reader cannot reach.
+    def _inline_sub(m):
+        tag = m.group(1).upper()
+        n = (sources or {}).get(tag, {}).get("n")
+        if n:
+            return f'<super><font color="#1565C0" size="7">{n}</font></super>'
+        return ""
+
+    text = _INLINE_TAG_RE.sub(_inline_sub, text)
+    # Tidy the spacing left behind by a removed tag.
+    text = re.sub(r"\s+([,.;:)])", r"\1", text)
+    text = re.sub(r"[ \t]{2,}", " ", text).strip()
     if provenance == "grounded":
         cite = ""
         if source:

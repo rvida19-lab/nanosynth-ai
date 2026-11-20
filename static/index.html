@@ -738,11 +738,31 @@ async function generate() {
   btn.textContent = '⬡ Generate Nanoparticle Design';
 }
 
+// Source tags the model sometimes writes inline in prose — "...in systemic
+// regimens [S5]" — rather than in the claim's `source` field. Left alone they
+// render literally in the report, which reads as leaked debug output. Resolvable
+// tags become real superscript citations; unresolvable ones are removed, since a
+// marker pointing at nothing is worse than no marker.
+const INLINE_TAG_RE = /[\[(]\s*([SM]\d{1,2})\s*[\])]/g;
+
+function resolveInlineTags(text, sources) {
+  return (text || '')
+    .replace(INLINE_TAG_RE, (_, tag) => {
+      const src = (sources || {})[tag.toUpperCase()];
+      if (!src) return '';
+      const marker = src.n || tag;
+      return `<sup><a class="cite-link" href="${src.url}" target="_blank" rel="noopener" title="${src.title || ''}">${marker}</a></sup>`;
+    })
+    .replace(/\s+([,.;:)])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 function claimSpan(claim, sources) {
   // claim = {text, provenance, source} — renders highlighted span + citation link if grounded
   if (!claim || typeof claim !== 'object') return claim || '';
   const prov = claim.provenance === 'grounded' ? 'grounded' : 'extrapolated';
-  const text = claim.text || '';
+  const text = resolveInlineTags(claim.text, sources);
   let citeHTML = '';
   if (prov === 'grounded' && claim.source && sources[claim.source]) {
     const src = sources[claim.source];

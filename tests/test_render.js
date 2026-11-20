@@ -196,6 +196,27 @@ check('micelle: size warning', body.includes('do not ask for 100+ nm'));
   check('non-HTML garbage is quoted back verbatim',
         garbage.message.includes('upstream connect error') && garbage.message.includes('500'));
 
+  section('inline source tags are resolved, not printed');
+  // The model sometimes writes "[S5]" in prose rather than in the source field.
+  // Left alone it renders literally, which reads as leaked debug output.
+  const srcMap = { S4: { n: 6, url: 'u', title: 't' } };
+  const resolved = claimSpan(
+    { text: 'ZUP1-driven repair [S4] drives resistance.',
+      provenance: 'grounded', source: 'S4' }, srcMap);
+  check('a literal [S4] never reaches the page', !resolved.includes('[S4]'));
+  check('it becomes a clickable superscript', resolved.includes('<sup><a class="cite-link"'));
+
+  const dangling = claimSpan(
+    { text: 'Toxicity in systemic regimens [S9] is a liability.',
+      provenance: 'extrapolated', source: null }, srcMap);
+  check('an unresolvable tag is removed', !dangling.includes('[S9]'));
+  check('no space is left before punctuation', dangling.includes('regimens is'));
+
+  const plain = claimSpan(
+    { text: 'Size range [80-120 nm] is unaffected.',
+      provenance: 'extrapolated', source: null }, srcMap);
+  check('ordinary bracketed prose is untouched', plain.includes('[80-120 nm]'));
+
   console.log('\n' + (failures === 0
     ? '═══ ALL RENDER TESTS PASSED ═══'
     : `═══ ${failures} FAILURE(S) ═══`));

@@ -118,6 +118,38 @@ for bad, label in [
         check(f"handles {label} without raising — raised {e}", False)
 
 
+# ── Inline source tags ────────────────────────────────────────────────────
+# The model sometimes writes "[S5]" directly in prose instead of using the
+# claim's source field. Observed in a live report, where it rendered literally
+# AND caused the cited paper to be filtered out of References.
+section("inline source tags in prose")
+
+_src = {"S4": {"n": 6, "url": "u", "title": "t"},
+        "M1": {"n": 11, "url": "u", "title": "t"}}
+
+_inline = app._claim_to_html(
+    {"text": "ZUP1-driven DNA repair upregulation [S4] drives resistance.",
+     "provenance": "grounded", "source": "S4"}, _src)
+check("a literal [S4] never reaches the page", "[S4]" not in _inline)
+check("it becomes the correct superscript number", ">6</font></super>" in _inline)
+
+_dangling = app._claim_to_html(
+    {"text": "Toxicity in systemic regimens [S9] is a liability.",
+     "provenance": "extrapolated", "source": None}, _src)
+check("an unresolvable tag is removed, not left dangling", "[S9]" not in _dangling)
+check("removing it does not leave a space before punctuation",
+      "regimens is" in _dangling)
+
+check("inline-only citations are counted, so References keeps the paper",
+      app._collect_cited_tags(
+          {"rationale": [{"text": "Dose-limiting toxicity [S5] matters.", "source": None}],
+           "composition": {}, "synthesis": []}) == {"S5"})
+check("bracketed and parenthesised forms are both caught",
+      app._inline_tags("see [S1] and (M2) and [ S3 ]") == {"S1", "M2", "S3"})
+check("ordinary bracketed prose is untouched",
+      app._inline_tags("a range [80-120 nm] and a note [see below]") == set())
+
+
 # ── Retrieval status ──────────────────────────────────────────────────────
 # An all-extrapolated report can mean "no literature supports this" or "the
 # search never ran". Those license opposite conclusions and must not look alike.
