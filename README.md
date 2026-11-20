@@ -10,8 +10,10 @@ PDF — with every claim tagged as either **Grounded** in a cited PubMed source 
 > experimentally validated. Read [Limitations](#limitations) before relying on
 > any output — it is the most important section in this README.
 
-<!-- Add once deployed: **[Live demo](https://your-app.onrender.com)** -->
-
+**[Live demo](https://nanosynth-ai.onrender.com)** — bring your own Anthropic API key
+git add README.md
+git commit -m "Add live demo link"
+git push
 ---
 
 ## What makes it different
