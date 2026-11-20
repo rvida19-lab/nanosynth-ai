@@ -121,13 +121,43 @@ for bad, label in [
 # ── Retrieval status ──────────────────────────────────────────────────────
 # An all-extrapolated report can mean "no literature supports this" or "the
 # search never ran". Those license opposite conclusions and must not look alike.
+#
+# These assert on _retrieval_notice() directly rather than rendering a PDF and
+# parsing it back. An earlier version shelled out to pdftotext, which is not
+# present on a stock CI runner — a test that needs an external binary tests the
+# environment as much as the code.
 section("retrieval status is distinguishable")
 
-import re  # noqa: E402
-import subprocess, tempfile  # noqa: E402
+_failed = app._retrieval_notice(
+    {"state": "failed", "detail": "grounding search (ConnectionError)", "found": 0})
+check("a failed search produces a notice", _failed is not None)
+check("failure is flagged as a warning, not a footnote",
+      _failed["severity"] == "warn")
+check("failure says ungrounded by circumstance, not by absence",
+      "ungrounded by circumstance" in _failed["text"])
+check("failure warns that missing citations prove nothing",
+      "carries no evidential weight" in _failed["text"])
+check("failure names the search that broke",
+      "ConnectionError" in _failed["text"])
+check("failure with no detail still reads sensibly",
+      "cause unknown" in app._retrieval_notice({"state": "failed"})["text"])
 
+_empty = app._retrieval_notice({"state": "empty", "detail": "", "found": 0})
+check("an empty search produces a softer note",
+      _empty is not None and _empty["severity"] == "note")
+check("an empty search is NOT described as a failure",
+      "retrieval failed" not in _empty["text"].lower())
+check("an empty search distinguishes unexplored space from narrow terms",
+      "unexplored design space" in _empty["text"])
 
-def _report_text(status):
+check("a successful search produces no notice",
+      app._retrieval_notice({"state": "ok", "detail": "", "found": 8}) is None)
+check("a missing status produces no notice", app._retrieval_notice(None) is None)
+check("an unknown state produces no notice",
+      app._retrieval_notice({"state": "weird"}) is None)
+
+# The PDF must still build in every state (no external tooling needed to check).
+def _builds(status):
     E = lambda t: {"text": t, "provenance": "extrapolated", "source": None}  # noqa: E731
     d = {
         "architecture": "mesoporous_core_shell", "imaging_core": False,
@@ -150,34 +180,13 @@ def _report_text(status):
     buf = app._build_pdf_report(
         d, {}, {"disease": "x", "drug": "y", "size": "80-120 nm", "route": ""},
         svg, {"similar": [], "references": [], "similar_query": "()"})
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-        f.write(buf.getvalue())
-        path = f.name
-    raw = subprocess.run(["pdftotext", path, "-"],
-                         capture_output=True, text=True).stdout
-    # Collapse whitespace: PDF line wrapping would otherwise split the phrases
-    # being matched, making these assertions fail on layout rather than content.
-    return re.sub(r"\s+", " ", raw)
+    return len(buf.getvalue()) > 1000
 
 
-_failed = _report_text({"state": "failed",
-                        "detail": "grounding search (ConnectionError)", "found": 0})
-check("a failed search is reported as a failure",
-      "Literature retrieval failed" in _failed)
-check("failure says ungrounded by circumstance, not by absence",
-      "ungrounded by circumstance" in _failed)
-check("failure warns that missing citations prove nothing",
-      "carries no evidential weight" in _failed)
-
-_empty = _report_text({"state": "empty", "detail": "", "found": 0})
-check("a genuinely empty search is NOT reported as a failure",
-      "No matching literature found" in _empty
-      and "Literature retrieval failed" not in _empty)
-
-_ok = _report_text({"state": "ok", "detail": "", "found": 8})
-check("a successful search adds no retrieval notice",
-      "Literature retrieval failed" not in _ok
-      and "No matching literature found" not in _ok)
+for _state in ({"state": "failed", "detail": "x (Timeout)"},
+               {"state": "empty"}, {"state": "ok", "found": 3}, None):
+    _label = (_state or {}).get("state", "none") if _state else "none"
+    check(f"PDF builds with retrieval state '{_label}'", _builds(_state))
 
 
 # ── Bibliography: References means WORKS CITED ────────────────────────────

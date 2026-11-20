@@ -651,6 +651,48 @@ def _check_dimensions(design):
     }
 
 
+def _retrieval_notice(status):
+    """
+    Returns the reader-facing notice for a literature-retrieval outcome, or None
+    when retrieval succeeded and nothing needs saying.
+
+    This exists as a separate pure function so the wording is testable without
+    building a PDF and parsing it back. The distinction it draws is the point:
+    an ungrounded report means nothing until the reader knows whether no
+    literature exists or the search simply never ran.
+
+    Returns {"severity": "warn"|"note", "text": str} or None.
+    """
+    status = status or {}
+    state = status.get("state")
+
+    if state == "failed":
+        detail = status.get("detail") or "cause unknown"
+        return {
+            "severity": "warn",
+            "text": (
+                f"<b>Literature retrieval failed.</b> One or more PubMed queries did not "
+                f"complete ({detail}). This report is therefore ungrounded by circumstance, "
+                f"not because no supporting literature exists — absence of citations below "
+                f"carries no evidential weight. Re-run before drawing any conclusion from "
+                f"the provenance tags."
+            ),
+        }
+
+    if state == "empty":
+        return {
+            "severity": "note",
+            "text": (
+                "<b>No matching literature found.</b> The PubMed queries completed but "
+                "returned no records for this disease, payload and fabrication combination. "
+                "Every claim below is therefore extrapolated. This may indicate genuinely "
+                "unexplored design space, or simply that the search terms were too narrow."
+            ),
+        }
+
+    return None
+
+
 def _claim_text(claim):
     """Pulls the plain text out of a {text, provenance, source} claim object."""
     if isinstance(claim, dict):
@@ -1560,36 +1602,20 @@ def _build_pdf_report(design, sources, params, svg_markup, bibliography=None):
     ))
 
     # ── Retrieval status ──
-    # An ungrounded report is only interpretable if the reader knows WHY it is
-    # ungrounded. "The search found nothing" and "the search did not run" look
-    # identical on the page but mean opposite things, so the distinction is stated
-    # rather than left to inference.
-    status = design.get("retrieval_status") or {}
-    if status.get("state") == "failed":
+    # The wording lives in _retrieval_notice() so it can be tested directly, without
+    # rendering a PDF and shelling out to an external binary to read it back.
+    notice = _retrieval_notice(design.get("retrieval_status"))
+    if notice:
+        severe = notice["severity"] == "warn"
         story.append(Paragraph(
-            f'<b>Literature retrieval failed.</b> One or more PubMed queries did not complete '
-            f'({status["detail"]}). This report is therefore ungrounded by circumstance, not '
-            f'because no supporting literature exists — absence of citations below carries no '
-            f'evidential weight. Re-run before drawing any conclusion from the provenance tags.',
+            notice["text"],
             ParagraphStyle(
-                "NSRetrievalWarn", parent=legend_style, fontSize=8, leading=11,
-                textColor=colors.HexColor("#8A6100"),
-                borderColor=colors.HexColor("#E8B84B"), borderWidth=0.6,
-                borderPadding=6, backColor=colors.HexColor("#FDF6E3"),
+                "NSRetrieval", parent=legend_style, fontSize=8, leading=11,
+                textColor=colors.HexColor("#8A6100" if severe else "#555555"),
+                borderColor=colors.HexColor("#E8B84B" if severe else "#CCCCCC"),
+                borderWidth=0.6, borderPadding=6,
+                backColor=colors.HexColor("#FDF6E3") if severe else None,
                 spaceBefore=6, spaceAfter=4,
-            )
-        ))
-    elif status.get("state") == "empty":
-        story.append(Paragraph(
-            '<b>No matching literature found.</b> The PubMed queries completed but returned no '
-            'records for this disease, payload and fabrication combination. Every claim below is '
-            'therefore extrapolated. This may indicate genuinely unexplored design space, or '
-            'simply that the search terms were too narrow.',
-            ParagraphStyle(
-                "NSRetrievalNote", parent=legend_style, fontSize=8, leading=11,
-                textColor=colors.HexColor("#555555"),
-                borderColor=colors.HexColor("#CCCCCC"), borderWidth=0.6,
-                borderPadding=6, spaceBefore=6, spaceAfter=4,
             )
         ))
 
