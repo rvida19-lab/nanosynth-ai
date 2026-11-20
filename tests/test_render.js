@@ -159,7 +159,45 @@ check('inorganic: "surface only"', body.includes('surface only'));
 check('MSN: "No MSN drug is FDA-approved"', body.includes('No MSN drug is FDA-approved'));
 check('micelle: size warning', body.includes('do not ask for 100+ nm'));
 
-console.log('\n' + (failures === 0
-  ? '═══ ALL RENDER TESTS PASSED ═══'
-  : `═══ ${failures} FAILURE(S) ═══`));
-process.exit(failures === 0 ? 0 : 1);
+// readJSON is async, so these run last and the summary waits on them.
+(async () => {
+  section('readJSON turns non-JSON failures into actionable messages');
+  // A bare resp.json() on an HTML body throws "Unexpected token '<'", which tells a
+  // visitor nothing. On free hosting that spins down after idle, an HTML cold-start
+  // or gateway page is the most likely non-JSON response, so it needs to say so.
+  const resp = (status, body) => ({ status, text: async () => body });
+  const caught = async (status, body) => {
+    try { return { value: await readJSON(resp(status, body)) }; }
+    catch (e) { return { error: e }; }
+  };
+
+  const okCase = await caught(200, '{"ok":true}');
+  check('valid JSON parses unchanged', okCase.value && okCase.value.ok === true);
+
+  const errCase = await caught(400, '{"ok":false,"error":"No API key provided."}');
+  check('a JSON error body is returned, not thrown',
+        errCase.value && errCase.value.error.includes('No API key'));
+
+  const html = (await caught(200, '<!DOCTYPE html><html>Deploying</html>')).error;
+  check('HTML body does NOT surface "Unexpected token"',
+        html instanceof Error && !html.message.includes('Unexpected token'));
+  check('HTML body says a page came back instead of a result',
+        html.message.includes('web page instead of a result'));
+  check('HTML body tells the user to wait and retry',
+        html.message.toLowerCase().includes('try again'));
+
+  for (const status of [502, 503, 504]) {
+    const e = (await caught(status, '<html>Bad Gateway</html>')).error;
+    check(`HTTP ${status} explains the spin-down / cold start`,
+          e.message.includes('starting up') && e.message.includes(String(status)));
+  }
+
+  const garbage = (await caught(500, 'upstream connect error')).error;
+  check('non-HTML garbage is quoted back verbatim',
+        garbage.message.includes('upstream connect error') && garbage.message.includes('500'));
+
+  console.log('\n' + (failures === 0
+    ? '═══ ALL RENDER TESTS PASSED ═══'
+    : `═══ ${failures} FAILURE(S) ═══`));
+  process.exit(failures === 0 ? 0 : 1);
+})();

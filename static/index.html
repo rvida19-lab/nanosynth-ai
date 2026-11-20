@@ -664,6 +664,38 @@ function getActive(id) {
 }
 function val(id) { return document.getElementById(id).value.trim(); }
 
+// Parses a JSON response, turning the common non-JSON failures into something a
+// reader can act on. A bare `resp.json()` on an HTML body throws
+// "Unexpected token '<'", which tells a visitor nothing — and on a free hosting
+// tier that spins down after idle, an HTML cold-start or gateway page is the
+// single most likely thing to come back. The distinction matters: "wait and
+// retry" and "this is broken" need different responses from the user.
+async function readJSON(resp) {
+  const body = await resp.text();
+  try {
+    return JSON.parse(body);
+  } catch (_) {
+    const looksHTML = body.trimStart().startsWith('<');
+    if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
+      throw new Error(
+        'The server is starting up or temporarily unavailable (HTTP ' + resp.status +
+        '). Free hosting spins the instance down after 15 minutes idle, and a cold ' +
+        'start takes up to a minute — wait a moment and try again.');
+    }
+    if (looksHTML) {
+      throw new Error(
+        'The server returned a web page instead of a result' +
+        (resp.status !== 200 ? ' (HTTP ' + resp.status + ')' : '') +
+        '. This usually means it is restarting or still waking up. Wait a minute ' +
+        'and try again; if it persists, the deployment may be down.');
+    }
+    throw new Error(
+      'Could not read the server response' +
+      (resp.status !== 200 ? ' (HTTP ' + resp.status + ')' : '') + ': ' +
+      body.slice(0, 120));
+  }
+}
+
 async function generate() {
   const btn = document.getElementById('genBtn');
   btn.disabled = true;
@@ -693,7 +725,7 @@ async function generate() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey: val('apiKey'), params })
     });
-    const data = await resp.json();
+    const data = await readJSON(resp);
     if (!data.ok) throw new Error(data.error);
     // /generate now returns both literature sets, so no separate /literature call
     // is needed — that second request re-ran the identical PubMed query.
@@ -919,7 +951,7 @@ async function exportPDF() {
       })
     });
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: 'Export failed' }));
+      const err = await readJSON(resp).catch(e => ({ error: e.message }));
       throw new Error(err.error || 'Export failed');
     }
     const blob = await resp.blob();
