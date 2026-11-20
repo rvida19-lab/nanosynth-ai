@@ -622,18 +622,32 @@ def _check_dimensions(design):
     if stated is None:
         return None
 
-    # Tolerance: shells are approximate and "~" figures are rounded. Flag only a
-    # discrepancy large enough to matter — i.e. one that could push the particle out
-    # of its intended size band.
+    # Tolerance. The figures carry "~", so some rounding slack is legitimate: each
+    # layer is written to the nearest nm or so, and a shell's error doubles in the
+    # diameter. But the slack must stay smaller than a real mistake.
+    #
+    # Calibrated against an observed miss: a design listed a ~35 nm silica shell
+    # while its own protocol tracked the particle to ~80 nm after shell growth,
+    # which implies ~30 nm. That 5 nm shell error showed up as 10 nm of diameter
+    # (116 computed vs 106 stated) and slipped through a 12% band. 6% catches it
+    # while still absorbing honest rounding — a correctly specified design
+    # reconciles to within 1-2 nm, nowhere near this threshold.
+    #
+    # The absolute floor keeps very small carriers (dendrimers at 5-15 nm, micelles
+    # at 20-50 nm) from being flagged over sub-nanometre rounding, where a
+    # percentage band would be unreasonably tight.
     delta = abs(computed - stated)
-    ok = delta <= max(10.0, 0.12 * stated)
+    tolerance = max(3.0, 0.06 * stated)
+    ok = delta <= tolerance
 
     shell_str = " + ".join(f"{s:g}" for s in shells)
     return {
         "ok": ok,
         "computed": computed,
         "stated": stated,
-        "expression": f"{core:g} nm core + 2 x ({shell_str}) nm shells = {computed:g} nm",
+        "delta": delta,
+        "tolerance": tolerance,
+        "expression": f"{core:g} nm core + 2 × ({shell_str}) nm shells = {computed:g} nm",
     }
 
 
@@ -847,7 +861,12 @@ FORMATTING RULES (strict):
     * PLGA / polymer -> NHS-ester or carbodiimide coupling to surface carboxyls, or PEG-PLGA block copolymer.
 - THE TARGETING LIGAND MUST SIT AT THE DISTAL END OF THE PEG CHAIN, not on the particle surface underneath the PEG brush. If PEG is grafted first and the antibody is then coupled to the particle surface, the ligand is buried beneath its own stealth layer and cannot bind its receptor. Use HETEROBIFUNCTIONAL PEG (e.g. silane-PEG-maleimide) and conjugate a thiolated antibody or Fab' to the DISTAL terminus.
 - Do NOT describe EDC/NHS coupling to antibody lysines or carboxyls as "site-specific" — it is RANDOM conjugation and can block the antigen-binding site. Site-specific means maleimide-thiol to a reduced hinge Fab', enzymatic ligation, or a click handle. Use the term accurately or not at all.
-- LAYER STACK ARITHMETIC MUST RECONCILE WITH THE STATED DIAMETER. Entry 1 of "layer_stack" is the CORE (a diameter); every later entry is a SHELL (a radial thickness, present on BOTH sides). So: total diameter = core + 2 x (sum of shell thicknesses). Compute this and make sure it matches "diameter".text and stays inside the requested size range. A 15 nm core with 40 + 5 + 5 + 8 nm shells is 131 nm, NOT 105 nm — check your arithmetic before answering.
+- LAYER STACK ARITHMETIC MUST RECONCILE WITH THE STATED DIAMETER. Entry 1 of "layer_stack" is the CORE (a diameter); every later entry is a SHELL (a radial thickness, present on BOTH sides). So: total diameter = core + 2 x (sum of shell thicknesses). A 15 nm core with 40 + 5 + 5 + 8 nm shells is 131 nm, NOT 105 nm.
+    Before you answer, do this arithmetic explicitly and make all THREE of these agree:
+      (a) core + 2 x (sum of shells) = "diameter".text
+      (b) the requested size range contains that number
+      (c) any particle size you quote in a SYNTHESIS STEP matches the running total at that stage
+    (c) is the one most often missed. If a synthesis step says the particle reaches ~80 nm after shell growth, then a 20 nm core forces a 30 nm radial shell — NOT 35 nm. Reconcile the stack against your own protocol's numbers, then state the final diameter. Do not leave a layer thickness that contradicts a figure you quote elsewhere in the report.
 - "synthesis_search_terms": 3-5 SHORT PubMed queries (2-6 words each) naming the fabrication METHODS this design requires — one per major synthesis step. Name the MATERIAL and the TECHNIQUE. Be SPECIFIC: name the actual technique, not the field. These retrieve protocol papers, so a vague query returns broad reviews that cannot ground a step.
     GOOD: ["mesoporous silica sol-gel TEOS CTAB", "iron oxide thermal decomposition oleate", "ZIF-8 pore gating drug release", "silane-PEG-maleimide antibody conjugation"]
     BAD (too broad, returns reviews): ["iron oxide nanoparticle applications", "nanoparticle synthesis", "biomedical nanotechnology"]
@@ -1571,9 +1590,10 @@ def _build_pdf_report(design, sources, params, svg_markup, bibliography=None):
         if dim and not dim.get("ok"):
             story.append(Spacer(1, 8))
             story.append(Paragraph(
-                f'<b>Dimensional check.</b> The layer stack does not reconcile with the stated '
-                f'diameter: {dim["expression"]}, against a reported {dim["stated"]:g} nm. '
-                f'Treat both figures as unverified and recompute before use.',
+                f'<b>Dimensional check — not reconciled.</b> Summing the layer stack gives '
+                f'{dim["expression"]}, against a stated {dim["stated"]:g} nm — a discrepancy of '
+                f'{dim["delta"]:.0f} nm. At least one layer thickness or the stated diameter is '
+                f'wrong; both should be treated as unverified until recomputed.',
                 ParagraphStyle(
                     "NSDimWarn", parent=legend_style, fontSize=8, leading=11,
                     textColor=colors.HexColor("#8A6100"),

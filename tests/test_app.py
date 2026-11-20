@@ -78,6 +78,29 @@ consistent = {
 }
 check("stays silent on a consistent design", app._check_dimensions(consistent)["ok"])
 
+# Tolerance calibration. A shell listed 5 nm too thick shows up as 10 nm of
+# diameter — small enough to look like rounding, large enough to be a real
+# error. An earlier 12% band let exactly this through on a live run.
+def _dim(core, shells, stated):
+    return app._check_dimensions({
+        "layer_stack": [{"thickness": f"~{core} nm"}]
+                       + [{"thickness": f"~{s} nm"} for s in shells],
+        "composition": {"diameter": {"text": f"~{stated} nm"}},
+    })
+
+check("catches a 5 nm shell error (116 computed vs 106 stated)",
+      not _dim(20, [35, 5, 8], 106)["ok"])
+check("silent once that shell is corrected to 30 nm",
+      _dim(20, [30, 5, 8], 106)["ok"])
+check("silent on 1 nm rounding drift",
+      _dim(20, [30, 5, 8], 105)["ok"])
+check("silent on a small micelle within the absolute floor",
+      _dim(10, [8, 4], 35)["ok"])
+check("silent on a small dendrimer",
+      _dim(4, [3, 2], 14)["ok"])
+check("reports the discrepancy size for the reader",
+      abs(_dim(20, [35, 5, 8], 106)["delta"] - 10.0) < 0.01)
+
 # Must degrade, never raise, on malformed model output.
 for bad, label in [
     ({}, "empty design"),
