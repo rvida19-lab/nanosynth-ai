@@ -118,6 +118,68 @@ for bad, label in [
         check(f"handles {label} without raising — raised {e}", False)
 
 
+# ── Retrieval status ──────────────────────────────────────────────────────
+# An all-extrapolated report can mean "no literature supports this" or "the
+# search never ran". Those license opposite conclusions and must not look alike.
+section("retrieval status is distinguishable")
+
+import re  # noqa: E402
+import subprocess, tempfile  # noqa: E402
+
+
+def _report_text(status):
+    E = lambda t: {"text": t, "provenance": "extrapolated", "source": None}  # noqa: E731
+    d = {
+        "architecture": "mesoporous_core_shell", "imaging_core": False,
+        "composition": {k: E("...") for k in
+                        ["core", "shell", "payload", "surface", "gate"]}
+                       | {"diameter": E("~96 nm")},
+        "layer_stack": [{"thickness": "~20 nm", "material": "core"},
+                        {"thickness": "~30 nm", "material": "shell"},
+                        {"thickness": "~3 nm", "material": "gate"},
+                        {"thickness": "~5 nm", "material": "corona"}],
+        "rationale": [E("...")],
+        "synthesis": [{"step": "s", "detail": "d",
+                       "provenance": "extrapolated", "source": None}],
+        "retrieval_status": status,
+    }
+    d["dimension_check"] = app._check_dimensions(d)
+    svg = ('<svg width="640" height="380" viewBox="0 0 640 380" '
+           'xmlns="http://www.w3.org/2000/svg"><circle cx="320" cy="185" r="60" '
+           'fill="#8B5A2B"/></svg>')
+    buf = app._build_pdf_report(
+        d, {}, {"disease": "x", "drug": "y", "size": "80-120 nm", "route": ""},
+        svg, {"similar": [], "references": [], "similar_query": "()"})
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        f.write(buf.getvalue())
+        path = f.name
+    raw = subprocess.run(["pdftotext", path, "-"],
+                         capture_output=True, text=True).stdout
+    # Collapse whitespace: PDF line wrapping would otherwise split the phrases
+    # being matched, making these assertions fail on layout rather than content.
+    return re.sub(r"\s+", " ", raw)
+
+
+_failed = _report_text({"state": "failed",
+                        "detail": "grounding search (ConnectionError)", "found": 0})
+check("a failed search is reported as a failure",
+      "Literature retrieval failed" in _failed)
+check("failure says ungrounded by circumstance, not by absence",
+      "ungrounded by circumstance" in _failed)
+check("failure warns that missing citations prove nothing",
+      "carries no evidential weight" in _failed)
+
+_empty = _report_text({"state": "empty", "detail": "", "found": 0})
+check("a genuinely empty search is NOT reported as a failure",
+      "No matching literature found" in _empty
+      and "Literature retrieval failed" not in _empty)
+
+_ok = _report_text({"state": "ok", "detail": "", "found": 8})
+check("a successful search adds no retrieval notice",
+      "Literature retrieval failed" not in _ok
+      and "No matching literature found" not in _ok)
+
+
 # ── Bibliography: References means WORKS CITED ────────────────────────────
 section("bibliography — cited works only")
 

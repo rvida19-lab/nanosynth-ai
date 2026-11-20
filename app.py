@@ -778,19 +778,28 @@ def generate():
     #
     # These were previously the SAME query, so the two sections showed identical
     # papers and the "similar designs" list was really just clinical trial results.
+    # Retrieval status is tracked, not swallowed. An all-extrapolated report can mean
+    # two completely different things — "no literature supports this design" or "the
+    # literature search never completed" — and a reader cannot tell them apart from
+    # the output. Conflating them is precisely the kind of silent ambiguity this tool
+    # exists to remove, so failures are recorded and surfaced in the report.
+    retrieval_errors = []
+
     lit_papers, lit_query = [], ""
     try:
         lit_papers, lit_query = search_pubmed(disease, drug, retmax=5, fetch_abstracts=True)
-    except Exception:
-        # If PubMed is unreachable, proceed without grounding — the design
-        # will simply come back with everything marked as extrapolated.
+    except Exception as e:
         lit_papers = []
+        retrieval_errors.append(f"grounding search ({type(e).__name__})")
+        app.logger.warning("PubMed grounding search failed: %s", e)
 
     similar_papers, similar_query = [], ""
     try:
         similar_papers, similar_query = search_similar_designs(disease, drug, retmax=5)
-    except Exception:
+    except Exception as e:
         similar_papers = []
+        retrieval_errors.append(f"prior-art search ({type(e).__name__})")
+        app.logger.warning("PubMed similar-designs search failed: %s", e)
 
     # ── Source tags for the prompt (numbering deferred) ──
     # Citation NUMBERS cannot be assigned yet. References must contain only works the
@@ -961,8 +970,10 @@ Respond ONLY with a valid JSON object. No markdown, no backticks, no preamble. S
             if not terms:
                 terms = _fallback_method_terms(design, params)
             method_papers, method_queries = search_synthesis_methods(terms)
-        except Exception:
+        except Exception as e:
             method_papers = []
+            retrieval_errors.append(f"synthesis-methods search ({type(e).__name__})")
+            app.logger.warning("PubMed methods search failed: %s", e)
 
         if method_papers:
             # Method sources get their own tag space (M1, M2, ...) so the model cannot
@@ -1030,6 +1041,21 @@ PROVENANCE RULES — these matter more than any other instruction:
         # Dimensional reconciliation — cheap, mechanical, and the kind of arithmetic
         # slip a reviewer catches instantly but a junior user never would.
         design["dimension_check"] = _check_dimensions(design)
+
+        # Retrieval status, so the report can distinguish "nothing was found" from
+        # "the search did not run". Both produce an all-extrapolated design, but they
+        # license completely different conclusions.
+        total_found = len(lit_papers) + len(similar_papers) + len(method_papers)
+        if retrieval_errors:
+            design["retrieval_status"] = {
+                "state": "failed",
+                "detail": "; ".join(sorted(set(retrieval_errors))),
+                "found": total_found,
+            }
+        elif total_found == 0:
+            design["retrieval_status"] = {"state": "empty", "detail": "", "found": 0}
+        else:
+            design["retrieval_status"] = {"state": "ok", "detail": "", "found": total_found}
 
         # Drop the scratch field — it is a retrieval instruction, not part of the design
         design.pop("synthesis_search_terms", None)
@@ -1532,6 +1558,40 @@ def _build_pdf_report(design, sources, params, svg_markup, bibliography=None):
         'readers should consult the cited sources before relying on any claim.',
         legend_style
     ))
+
+    # ── Retrieval status ──
+    # An ungrounded report is only interpretable if the reader knows WHY it is
+    # ungrounded. "The search found nothing" and "the search did not run" look
+    # identical on the page but mean opposite things, so the distinction is stated
+    # rather than left to inference.
+    status = design.get("retrieval_status") or {}
+    if status.get("state") == "failed":
+        story.append(Paragraph(
+            f'<b>Literature retrieval failed.</b> One or more PubMed queries did not complete '
+            f'({status["detail"]}). This report is therefore ungrounded by circumstance, not '
+            f'because no supporting literature exists — absence of citations below carries no '
+            f'evidential weight. Re-run before drawing any conclusion from the provenance tags.',
+            ParagraphStyle(
+                "NSRetrievalWarn", parent=legend_style, fontSize=8, leading=11,
+                textColor=colors.HexColor("#8A6100"),
+                borderColor=colors.HexColor("#E8B84B"), borderWidth=0.6,
+                borderPadding=6, backColor=colors.HexColor("#FDF6E3"),
+                spaceBefore=6, spaceAfter=4,
+            )
+        ))
+    elif status.get("state") == "empty":
+        story.append(Paragraph(
+            '<b>No matching literature found.</b> The PubMed queries completed but returned no '
+            'records for this disease, payload and fabrication combination. Every claim below is '
+            'therefore extrapolated. This may indicate genuinely unexplored design space, or '
+            'simply that the search terms were too narrow.',
+            ParagraphStyle(
+                "NSRetrievalNote", parent=legend_style, fontSize=8, leading=11,
+                textColor=colors.HexColor("#555555"),
+                borderColor=colors.HexColor("#CCCCCC"), borderWidth=0.6,
+                borderPadding=6, spaceBefore=6, spaceAfter=4,
+            )
+        ))
 
     # ── 1. Nanoparticle architecture ──
     c = design.get("composition", {})
