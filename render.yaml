@@ -1,0 +1,36 @@
+# Render blueprint — deploys NanoSynth AI from this repo.
+#
+# Worker/thread choice is deliberate, not a default:
+#
+#   --workers 1   The NCBI rate limiter and the PubMed cache are both
+#                 process-local (a threading.Lock and a dict). Two worker
+#                 processes would each keep their own, silently doubling the
+#                 request rate against NCBI's per-IP limit and halving cache
+#                 hits. One worker keeps both correct.
+#
+#   --threads 8   Near all of a request's wall time is spent waiting on the
+#                 Anthropic API and PubMed, so threads give real concurrency
+#                 here despite the GIL.
+#
+#   --timeout 300 A generation makes two Claude calls plus up to ~11 PubMed
+#                 queries and can run 60-120s. Gunicorn's 30s default would
+#                 kill the worker mid-request.
+services:
+  - type: web
+    name: nanosynth-ai
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --workers 1 --threads 8 --timeout 300 --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # Optional. Raises the NCBI E-utilities limit from 3 to 10 requests/sec.
+      # Free from https://account.ncbi.nlm.nih.gov/settings/ — worth setting on
+      # a shared deployment, where every visitor shares this server's IP.
+      - key: NCBI_API_KEY
+        sync: false
+      # ANTHROPIC_API_KEY is deliberately NOT set here. This deployment is
+      # bring-your-own-key: each visitor supplies their own in the UI, so the
+      # server holds no credentials and cannot be billed for a stranger's runs.

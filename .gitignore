@@ -1,0 +1,46 @@
+# ── Secrets ────────────────────────────────────────────────────────────────
+# .env holds API keys. Never commit it. .env.example is the committed template.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+venv/
+.venv/
+env/
+ENV/
+.python-version
+
+# ── Testing / tooling ──────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ── Generated output ───────────────────────────────────────────────────────
+# Reports are generated per-run and may contain a user's research parameters.
+*.pdf
+!docs/**/*.pdf
+/output/
+/reports/
+
+# ── Editors / OS ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

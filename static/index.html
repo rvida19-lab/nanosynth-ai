@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NanoSynth AI — Nanoparticle Designer</title>
+<style>
+  /* ── Reset & Root ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy:   #0F1729;
+    --panel:  #1a2540;
+    --card:   #1e2d4a;
+    --border: rgba(255,255,255,0.1);
+    --teal:   #00C9A7;
+    --amber:  #F59E0B;
+    --grounded: #4FC3F7;
+    --extrapolated: #B388FF;
+    --text:   #E8EDF5;
+    --muted:  rgba(232,237,245,0.55);
+    --mono:   'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    --sans:   'Inter', system-ui, sans-serif;
+  }
+  body { background: var(--navy); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+  .header {
+    background: #0d1c3a; padding: 12px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--teal); flex-shrink: 0; }
+  .header-title { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; color: var(--teal); text-transform: uppercase; font-family: var(--mono); }
+  .badge { font-size: 9px; background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); border-radius: 3px; padding: 2px 7px; font-family: var(--mono); }
+  .header-right { margin-left: auto; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .header-credit { font-size: 11px; color: rgba(232,237,245,0.35); font-family: var(--mono); border-left: 1px solid rgba(255,255,255,0.12); padding-left: 10px; margin-left: 2px; }
+
+  .body { display: grid; grid-template-columns: 310px 1fr; min-height: calc(100vh - 49px); }
+
+  /* ── Sidebar ── */
+  .sidebar { background: var(--panel); border-right: 1px solid var(--border); padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .section-label { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--teal); font-family: var(--mono); font-weight: 600; margin-bottom: 6px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; color: var(--muted); }
+  .field input, .field select, .field textarea {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 8px 10px; font-size: 12px; font-family: var(--sans);
+    width: 100%; outline: none; transition: border-color 0.2s;
+    -webkit-appearance: none; appearance: none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--teal); }
+  .field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300C9A7' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 28px; }
+  .field textarea { resize: vertical; min-height: 72px; font-size: 11px; line-height: 1.5; }
+  .multi-select { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag-btn { background: var(--card); border: 1px solid var(--border); color: var(--muted); border-radius: 4px; padding: 4px 9px; font-size: 10px; cursor: pointer; transition: all 0.15s; font-family: var(--mono); }
+  .tag-btn.active { background: rgba(0,201,167,0.15); border-color: var(--teal); color: var(--teal); }
+  .tag-btn:hover { border-color: rgba(0,201,167,0.5); }
+  .divider { height: 1px; background: var(--border); }
+  .api-row { display: flex; gap: 6px; }
+  .api-row input { flex: 1; }
+  .show-btn { background: var(--card); border: 1px solid var(--border); color: var(--muted); border-radius: 5px; padding: 8px 10px; font-size: 10px; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: border-color 0.2s; }
+  .show-btn:hover { border-color: var(--teal); }
+  .generate-btn {
+    background: var(--teal); color: #0a1520; border: none; border-radius: 7px;
+    padding: 12px 16px; font-size: 12px; font-weight: 700; cursor: pointer;
+    width: 100%; letter-spacing: 0.06em; font-family: var(--mono);
+    transition: opacity 0.2s, transform 0.1s; margin-top: 4px;
+  }
+  .generate-btn:hover:not(:disabled) { opacity: 0.88; }
+  .generate-btn:active:not(:disabled) { transform: scale(0.98); }
+  .generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Output panel ── */
+  .output { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  .placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px; color: var(--muted); text-align: center; padding: 60px 40px; }
+  .placeholder p { font-size: 13px; line-height: 1.7; max-width: 320px; }
+
+  /* ── Export bar (top) ── */
+  .export-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .export-meta { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+  .arch-tag { margin-left: auto; font-size: 9px; background: rgba(0,201,167,0.12); border: 1px solid rgba(0,201,167,0.35); color: var(--teal); border-radius: 3px; padding: 2px 7px; letter-spacing: 0.06em; text-transform: none; }
+
+  /* ── Diagram: diameter callout + layer stack ── */
+  .dia-callout { text-align: center; padding: 2px 0 12px; }
+  .dia-value { font-size: 19px; font-weight: 700; color: var(--text); font-family: var(--mono); letter-spacing: 0.02em; }
+  .dia-label { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-left: 7px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .layer-stack { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 16px; }
+  .layer-row { display: grid; grid-template-columns: 30px 90px 1fr; align-items: center; padding: 7px 10px; font-size: 12px; }
+  .layer-row:not(:last-child) { border-bottom: 1px solid var(--border); }
+  .layer-idx { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+  .layer-thick { color: var(--text); font-family: var(--mono); font-weight: 600; font-size: 11.5px; }
+  .layer-mat { color: var(--muted); }
+
+  /* ── Typical Designs button + architecture reference modal ── */
+  .key-note { font-size: 10px; color: var(--muted); line-height: 1.55; margin-top: 7px; }
+  .key-note a { color: var(--teal); text-decoration: underline; }
+
+  .ref-btn {
+    width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+    background: rgba(0,201,167,0.06); border: 1px solid rgba(0,201,167,0.28);
+    border-radius: 7px; padding: 10px 12px; cursor: pointer; text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .ref-btn:hover { background: rgba(0,201,167,0.12); border-color: var(--teal); }
+  .ref-btn-main { font-size: 12px; font-weight: 600; color: var(--teal); font-family: var(--mono); letter-spacing: 0.04em; }
+  .ref-btn-sub { font-size: 10px; color: var(--muted); }
+
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(6,10,20,0.78); backdrop-filter: blur(3px);
+    align-items: center; justify-content: center; padding: 28px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    width: 100%; max-width: 940px; max-height: 88vh; display: flex; flex-direction: column;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.55);
+  }
+  .modal-head { display: flex; gap: 16px; align-items: flex-start; padding: 18px 22px 14px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+  .modal-sub { font-size: 11.5px; color: var(--muted); line-height: 1.55; max-width: 74ch; }
+  .modal-close {
+    margin-left: auto; flex-shrink: 0; background: transparent; border: 1px solid var(--border);
+    color: var(--muted); border-radius: 5px; width: 28px; height: 28px; cursor: pointer; font-size: 12px;
+  }
+  .modal-close:hover { color: var(--text); border-color: var(--teal); }
+  .modal-body { overflow-y: auto; padding: 6px 22px 4px; }
+  .modal-foot {
+    padding: 14px 22px 18px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--muted); line-height: 1.6;
+  }
+  .modal-foot strong { color: var(--teal); font-weight: 600; }
+  .modal-foot-note { margin: 0 0 8px; }
+  .ref-src { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .ref-src summary {
+    cursor: pointer; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--teal); font-family: var(--mono); list-style: none; user-select: none;
+  }
+  .ref-src summary::-webkit-details-marker { display: none; }
+  .ref-src summary::before { content: '▸ '; }
+  .ref-src[open] summary::before { content: '▾ '; }
+  .ref-src summary:hover { color: var(--text); }
+  .ref-src-list { margin: 8px 0 0; padding-left: 18px; }
+  .ref-src-list li { margin-bottom: 6px; line-height: 1.55; color: var(--muted); font-size: 10.5px; }
+  .ref-src-list i { color: rgba(232,237,245,0.55); }
+
+  .arch-card { display: grid; grid-template-columns: 116px 1fr; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .arch-card:last-child { border-bottom: none; }
+  .arch-left { display: flex; flex-direction: column; gap: 7px; }
+  .arch-icon {
+    width: 116px; height: 116px; background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border); border-radius: 8px; padding: 5px;
+  }
+  .arch-load {
+    width: 116px; background: rgba(0,201,167,0.08); border: 1px solid rgba(0,201,167,0.3);
+    color: var(--teal); border-radius: 5px; padding: 5px 4px; font-size: 10px;
+    font-family: var(--mono); cursor: pointer; transition: background 0.15s;
+  }
+  .arch-load:hover { background: rgba(0,201,167,0.18); border-color: var(--teal); }
+  .arch-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+  .arch-when { font-size: 12px; color: var(--text); line-height: 1.55; margin-bottom: 9px; }
+  /* Size + trigger as chips: both map directly to form fields, and a chip reads
+     faster than a labelled table row. */
+  .arch-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+  .arch-chip {
+    font-size: 10.5px; font-family: var(--mono); color: var(--muted);
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    border-radius: 4px; padding: 3px 8px;
+  }
+  .arch-chip b { color: var(--teal); font-weight: 600; margin-right: 4px; }
+  .arch-eg { font-size: 11px; color: var(--muted); line-height: 1.5; margin-bottom: 9px; }
+  /* The one trap that yields a WRONG design if missed — amber, so the eye lands
+     on it even when skimming. */
+  .arch-warn {
+    font-size: 11.5px; line-height: 1.55; color: var(--text);
+    background: rgba(245,158,11,0.06); border-left: 2px solid var(--amber);
+    border-radius: 0 4px 4px 0; padding: 7px 10px;
+  }
+  .arch-warn strong { color: var(--amber); font-weight: 600; }
+  .arch-warn em { font-style: italic; color: var(--text); }
+
+  @media (max-width: 720px) {
+    .arch-card { grid-template-columns: 1fr; }
+    .arch-icon, .arch-load { width: 108px; }
+  }
+
+  /* ── Output cards ── */
+  .out-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .out-card-header { padding: 9px 14px; background: rgba(0,201,167,0.07); border-bottom: 1px solid var(--border); font-size: 10px; font-family: var(--mono); color: var(--teal); letter-spacing: 0.1em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+  .out-card-body { padding: 16px; }
+
+  /* ── NP diagram ── */
+  .np-canvas { display: flex; justify-content: center; padding: 8px 0; }
+  .np-canvas svg { max-width: 100%; width: 100%; height: auto; }
+
+  /* ── Composition grid ── */
+  .comp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .comp-item { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 5px; padding: 9px 11px; }
+  .comp-item .ci-label { font-size: 9px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.08em; margin-bottom: 4px; text-transform: uppercase; }
+  .comp-item .ci-value { font-size: 12px; color: var(--text); line-height: 1.4; }
+
+  /* ── Synthesis steps ── */
+  .steps-list { display: flex; flex-direction: column; gap: 10px; }
+  .step { display: flex; gap: 11px; align-items: flex-start; }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; background: rgba(245,158,11,0.1); border: 1px solid var(--amber); color: var(--amber); font-size: 9px; font-family: var(--mono); font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .step-text { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .step-text strong { color: var(--text); display: block; font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+
+  /* ── Rationale ── */
+  .rationale { font-size: 13px; color: var(--muted); line-height: 1.7; background: rgba(0,201,167,0.04); border-left: 2px solid var(--teal); padding: 11px 14px; border-radius: 0 5px 5px 0; }
+
+  /* ── Provenance legend & highlighting ── */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; padding: 10px 14px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); font-size: 10.5px; font-family: var(--mono); }
+  .legend-item { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .legend-swatch { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+  .legend-swatch.grounded { background: transparent; border-bottom: 2px solid var(--grounded); border-radius: 0; }
+  .legend-swatch.extrapolated { background: transparent; border-bottom: 2px solid var(--extrapolated); border-radius: 0; }
+  .claim.grounded { border-bottom: 1.5px solid var(--grounded); }
+  .claim.extrapolated { border-bottom: 1.5px solid var(--extrapolated); }
+  .cite-link { font-size: 9.5px; color: var(--grounded); text-decoration: none; vertical-align: super; margin-left: 1px; font-family: var(--mono); cursor: pointer; }
+  .cite-link:hover { text-decoration: underline; }
+
+  /* ── Literature matches ── */
+  .lit-list { display: flex; flex-direction: column; gap: 10px; }
+  .lit-note { font-size: 11px; color: var(--muted); line-height: 1.55; margin-bottom: 10px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
+  .lit-item { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 9px 2px; border-bottom: 1px solid var(--border); }
+  .lit-item:last-child { border-bottom: none; }
+  .lit-num { font-size: 11px; color: var(--muted); font-family: var(--mono); padding-top: 1px; }
+  .lit-cite { font-size: 12.5px; color: var(--text); line-height: 1.55; }
+  .lit-cite .lit-authors { color: var(--muted); }
+  .lit-cite .lit-journal { font-style: italic; color: var(--muted); }
+  .lit-cite a { color: var(--grounded); text-decoration: none; }
+  .lit-cite a:hover { text-decoration: underline; }
+  .lit-title { font-size: 12.5px; color: var(--text); line-height: 1.5; font-weight: 500; margin-bottom: 5px; }
+  .lit-title a { color: var(--text); text-decoration: none; }
+  .lit-title a:hover { color: var(--teal); }
+  .lit-meta { font-size: 10.5px; color: var(--muted); font-family: var(--mono); display: flex; gap: 8px; flex-wrap: wrap; }
+  .lit-meta .pmid-link { color: var(--teal); text-decoration: none; }
+  .lit-meta .pmid-link:hover { text-decoration: underline; }
+  .lit-empty { font-size: 12px; color: var(--muted); line-height: 1.6; font-style: italic; }
+  .lit-query { font-size: 10px; color: rgba(232,237,245,0.35); font-family: var(--mono); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+  /* ── Loading ── */
+  .loading-bar { height: 2px; background: rgba(0,201,167,0.15); border-radius: 1px; overflow: hidden; }
+  .loading-bar-inner { height: 100%; background: var(--teal); animation: loadpulse 1.4s ease-in-out infinite; }
+  @keyframes loadpulse { 0%,100%{width:0;margin-left:0} 50%{width:60%;margin-left:20%} }
+  .lit-loading { font-size: 11px; color: var(--muted); font-family: var(--mono); display: flex; align-items: center; gap: 8px; }
+  .spin { width: 10px; height: 10px; border: 1.5px solid rgba(0,201,167,0.25); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Error ── */
+  .error-msg { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 7px; padding: 12px 16px; font-size: 12px; color: #f87171; font-family: var(--mono); line-height: 1.6; }
+
+  /* ── Export ── */
+  .export-row { display: flex; justify-content: center; padding: 6px 0 4px; }
+  .export-btn {
+    background: transparent; color: var(--amber); border: 1px solid rgba(245,158,11,0.4);
+    border-radius: 7px; padding: 10px 20px; font-size: 11.5px; font-weight: 600; cursor: pointer;
+    letter-spacing: 0.04em; font-family: var(--mono); transition: all 0.15s;
+  }
+  .export-btn:hover:not(:disabled) { background: rgba(245,158,11,0.1); border-color: var(--amber); }
+  .export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <div class="logo-dot"></div>
+    <span class="header-title">NanoSynth AI</span>
+    <!-- Byline sits with the wordmark, not beside the output, so it reads as
+         authorship of the TOOL rather than of any individual generated design. -->
+    <span class="header-credit">Tool by Rocco Vidaurre-Kirsch</span>
+    <span class="badge">research prototype</span>
+    <span class="header-right">Nanoparticle Complex Designer</span>
+  </header>
+
+  <div class="body">
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+      <div>
+        <div class="section-label">API Configuration</div>
+        <div class="field">
+          <label>Anthropic API Key</label>
+          <div class="api-row">
+            <input type="password" id="apiKey" placeholder="sk-ant-...">
+            <button class="show-btn" onclick="toggleKey()">Show</button>
+          </div>
+          <!-- Visitors are being asked to paste a credential into a website.
+               They deserve a plain statement of what happens to it, including
+               the part that is a genuine limitation. -->
+          <p class="key-note">
+            Your key is sent to this server only to call the Anthropic API for your
+            request. It is never stored, logged, or written to disk. It does travel
+            through this server in the clear, so if that matters to you,
+            <a href="https://github.com/rvida19-lab/nanosynth-ai#run-it-locally" target="_blank" rel="noopener">run
+            NanoSynth locally</a> instead — the key then never leaves your machine.
+          </p>
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <!-- Reference sheet. The icons are rendered by the SAME seven renderers the
+           tool uses to draw the real diagram, so this can never drift out of sync
+           with what the tool actually generates. -->
+      <button class="ref-btn" onclick="openArchRef()">
+        <span class="ref-btn-main">◫ Typical Designs</span>
+        <span class="ref-btn-sub">7 Common Reference Topologies</span>
+      </button>
+
+      <div class="divider"></div>
+
+      <div>
+        <div class="section-label">Target Disease &amp; Biology</div>
+        <div class="field">
+          <label>Cancer / Disease Type</label>
+          <input type="text" id="disease" value="triple-negative breast cancer">
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Target Receptor / Biomarker</label>
+          <input type="text" id="receptor" value="EpCAM">
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <div>
+        <div class="section-label">Therapeutic Payload</div>
+        <div class="field">
+          <label>Drug / Payload</label>
+          <input type="text" id="drug" value="Olaparib">
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <div>
+        <div class="section-label">Imaging Modality</div>
+        <div class="multi-select" id="imagingTags">
+          <button class="tag-btn active" onclick="toggleTag(this)">T2 MRI</button>
+          <button class="tag-btn" onclick="toggleTag(this)">PET</button>
+          <button class="tag-btn" onclick="toggleTag(this)">Fluorescence</button>
+          <button class="tag-btn" onclick="toggleTag(this)">CT</button>
+          <button class="tag-btn" onclick="toggleTag(this)">Photoacoustic</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <div>
+        <div class="section-label">Release Trigger</div>
+        <div class="multi-select" id="triggerTags">
+          <button class="tag-btn active" onclick="toggleTag(this)">pH-responsive</button>
+          <button class="tag-btn" onclick="toggleTag(this)">ROS</button>
+          <button class="tag-btn" onclick="toggleTag(this)">Temperature</button>
+          <button class="tag-btn" onclick="toggleTag(this)">Enzyme</button>
+          <button class="tag-btn" onclick="toggleTag(this)">Light</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <div>
+        <div class="section-label">Physical Constraints</div>
+        <div class="field">
+          <label>Architecture</label>
+          <select id="archChoice">
+            <option value="">Auto (Infer From Payload)</option>
+            <option value="lipid_nanoparticle">Lipid Nanoparticle (LNP)</option>
+            <option value="vesicle">Vesicle (Liposome)</option>
+            <option value="mesoporous_core_shell">Mesoporous Core–Shell (MSN)</option>
+            <option value="micelle">Polymeric Micelle</option>
+            <option value="polymer_matrix">Polymer Matrix</option>
+            <option value="inorganic_core_ligand">Inorganic Core + Ligand</option>
+            <option value="dendrimer">Dendrimer</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Target Diameter (nm)</label>
+          <select id="sizeRange">
+            <option>50–100 nm</option>
+            <option selected>80–120 nm</option>
+            <option>120–200 nm</option>
+          </select>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Administration Route</label>
+          <select id="adminRoute">
+            <option value="" selected>Not Specified</option>
+            <option>Intravenous (IV)</option>
+            <option>Intratumoral</option>
+            <option>Oral</option>
+            <option>Inhaled</option>
+          </select>
+        </div>
+      </div>
+      <div class="divider"></div>
+
+      <div>
+        <div class="section-label">Literature Context (optional)</div>
+        <div class="field">
+          <textarea id="litContext" placeholder="Paste key findings, DOI references, or notes from papers here..."></textarea>
+        </div>
+      </div>
+
+      <button class="generate-btn" id="genBtn" onclick="generate()">⬡ Generate Nanoparticle Design</button>
+      <!-- NOTE: "Grounded" and "Extrapolated" are BOTH capitalized here, matching the
+           legend above the output cards and the PDF report legend. Keep it that way. -->
+      <p style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5">
+        <span style="color:var(--grounded)">Grounded</span> / <span style="color:var(--extrapolated)">Extrapolated</span> tags are self-reported by the AI based on retrieved sources, not independently verified — review citations before relying on a design.
+      </p>
+    </aside>
+
+    <!-- ── OUTPUT ── -->
+    <main class="output" id="output">
+      <div class="placeholder" id="placeholder">
+        <svg width="90" height="90" viewBox="0 0 90 90" fill="none" xmlns="http://www.w3.org/2000/svg" opacity="0.15">
+          <circle cx="45" cy="45" r="34" stroke="white" stroke-width="2"/>
+          <circle cx="45" cy="45" r="20" stroke="white" stroke-width="1.5"/>
+          <circle cx="45" cy="45" r="9" fill="white" fill-opacity="0.4"/>
+          <circle cx="24" cy="31" r="3.5" fill="white"/><circle cx="66" cy="31" r="3.5" fill="white"/>
+          <circle cx="24" cy="59" r="3.5" fill="white"/><circle cx="66" cy="59" r="3.5" fill="white"/>
+          <circle cx="45" cy="14" r="3.5" fill="white"/><circle cx="45" cy="76" r="3.5" fill="white"/>
+        </svg>
+        <p>Configure your target parameters and click <strong style="color:var(--teal)">Generate</strong> to design an AI-optimized nanoparticle complex with a labeled diagram, full synthesis protocol, and matching published literature.</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ── Architecture reference modal ──────────────────────────────────────────
+     Populated at open time by renderArchRef(), which draws each icon with the
+     real architecture renderer. Nothing here is hand-drawn, so the reference
+     sheet always matches what the tool will actually produce. -->
+<div class="modal-backdrop" id="archModal" onclick="if(event.target===this) closeArchRef()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="archModalTitle">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="archModalTitle">Typical Nanoparticle Designs</div>
+        <div class="modal-sub">The tool picks one of these seven from your payload.<br>Not sure which? Load an example and edit it.</div>
+      </div>
+      <button class="modal-close" onclick="closeArchRef()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="archModalBody"></div>
+    <div class="modal-foot">
+      <p class="modal-foot-note">An <strong>imaging core</strong> (SPION, gold, quantum dot) can be added to the centre of most of these — it is an option, not an eighth design.</p>
+
+      <details class="ref-src">
+        <summary>Sources for these definitions</summary>
+        <p class="modal-foot-note">Reference material for this guide only — <strong>not</strong> included in any report you generate, whose references come from a live PubMed search on your own parameters.</p>
+      <ol class="ref-src-list">
+        <li>Mitchell MJ, Billingsley MM, Haley RM, Wechsler ME, Peppas NA, Langer R. Engineering precision nanoparticles for drug delivery. <i>Nat Rev Drug Discov</i>. 2021;20(2):101–124. doi:10.1038/s41573-020-0090-8. PMID: 33277608.</li>
+        <li>Anselmo AC, Mitragotri S. Nanoparticles in the clinic: an update. <i>Bioeng Transl Med</i>. 2019;4(3):e10143. doi:10.1002/btm2.10143. PMID: 31572799.</li>
+        <li>Anselmo AC, Mitragotri S. Nanoparticles in the clinic: an update post COVID-19 vaccines. <i>Bioeng Transl Med</i>. 2021;6(3):e10246. doi:10.1002/btm2.10246. PMID: 34514159.</li>
+        <li>Hou X, Zaks T, Langer R, Dong Y. Lipid nanoparticles for mRNA delivery. <i>Nat Rev Mater</i>. 2021;6(12):1078–1094. doi:10.1038/s41578-021-00358-0. PMID: 34394960.</li>
+        <li>Blanco E, Shen H, Ferrari M. Principles of nanoparticle design for overcoming biological barriers to drug delivery. <i>Nat Biotechnol</i>. 2015;33(9):941–951. doi:10.1038/nbt.3330. PMID: 26348965.</li>
+      </ol>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  ARCHITECTURE REFERENCE SHEET
+//
+//  Aimed at someone asked to produce a design without an experienced colleague
+//  on hand: what are the options, what real materials map to each, and which one
+//  does my payload imply?
+//
+//  The icons are rendered by the SAME ARCH_RENDERERS the tool uses for the real
+//  diagram — cropped to the particle and scaled down. So this sheet cannot drift
+//  out of sync with what the tool actually generates, and every icon is a true
+//  cross-section rather than a decorative sketch.
+// ═══════════════════════════════════════════════════════════════════════════
+const ARCH_REFERENCE = [
+  {
+    key: 'lipid_nanoparticle',
+    name: 'Lipid Nanoparticle (LNP)',
+    when: 'Nucleic acid payloads — mRNA, siRNA, pDNA.',
+    size: '60–100 nm',
+    triggers: 'pH-responsive',
+    examples: 'Comirnaty and Spikevax (the COVID-19 vaccines); Onpattro.',
+    watch: 'Not a liposome — an LNP has <strong>no aqueous lumen</strong>.',
+    example: { drug: 'mRNA', receptor: 'PEG-Lipid', imaging: 'T2 MRI', trigger: 'pH-responsive' },
+    imagingCore: true,
+    prefill: { disease: 'melanoma', receptor: 'PEG-Lipid', drug: 'mRNA', imaging: ['T2 MRI'],
+               trigger: ['pH-responsive'], sizeRange: '50–100 nm', adminRoute: 'Intravenous (IV)' },
+  },
+  {
+    key: 'vesicle',
+    name: 'Vesicle (Liposome)',
+    when: 'Hydrophilic small molecules that need encapsulating in water.',
+    size: '80–150 nm',
+    triggers: 'Temperature, pH, Enzyme',
+    examples: 'Doxil (the first approved nanomedicine, 1995); AmBisome.',
+    watch: 'A <em>hydrophobic</em> drug sits in the bilayer, not the lumen — with far less capacity.',
+    example: { drug: 'Doxorubicin', receptor: 'HER2', imaging: 'T2 MRI', trigger: 'Temperature' },
+    imagingCore: false,
+    prefill: { disease: 'HER2-positive breast cancer', receptor: 'HER2', drug: 'Doxorubicin',
+               imaging: ['T2 MRI'], trigger: ['Temperature'], sizeRange: '80–120 nm', adminRoute: 'Intravenous (IV)' },
+  },
+  {
+    key: 'mesoporous_core_shell',
+    name: 'Mesoporous Core–Shell (MSN)',
+    when: 'Small molecules needing gated, triggered release.',
+    size: '~100 nm',
+    triggers: 'pH, Redox, Enzyme, Light, ROS',
+    examples: 'Cornell dots (reached clinical trials).',
+    watch: '<strong>No MSN drug is FDA-approved yet</strong> — treat output as a research proposal.',
+    example: { drug: 'Olaparib', receptor: 'EpCAM', imaging: 'T2 MRI', trigger: 'pH-responsive' },
+    imagingCore: false,
+    prefill: { disease: 'triple-negative breast cancer', receptor: 'EpCAM', drug: 'Olaparib',
+               imaging: ['T2 MRI'], trigger: ['pH-responsive'], sizeRange: '80–120 nm', adminRoute: 'Intravenous (IV)' },
+  },
+  {
+    key: 'micelle',
+    name: 'Polymeric Micelle',
+    when: 'Poorly water-soluble drugs that mainly need solubilising.',
+    size: '20–50 nm',
+    triggers: 'pH, Redox',
+    examples: 'Genexol-PM (paclitaxel, approved in South Korea).',
+    watch: 'The smallest carrier — <strong>do not ask for 100+ nm</strong>. Low drug loading.',
+    example: { drug: 'Paclitaxel', receptor: 'FOLR1', imaging: 'Fluorescence', trigger: 'pH-responsive' },
+    imagingCore: false,
+    prefill: { disease: 'ovarian cancer', receptor: 'FOLR1', drug: 'Paclitaxel', imaging: ['Fluorescence'],
+               trigger: ['pH-responsive'], sizeRange: '50–100 nm', adminRoute: 'Intravenous (IV)' },
+  },
+  {
+    key: 'polymer_matrix',
+    name: 'Polymer Matrix',
+    when: 'Sustained release over days to weeks.',
+    size: '100–200 nm',
+    triggers: 'None — erosion-controlled',
+    examples: 'Abraxane (albumin-bound paclitaxel); Eligard.',
+    watch: '<strong>Release triggers do not apply here.</strong> Need on-demand release? Use an MSN or vesicle.',
+    example: { drug: 'Docetaxel', receptor: 'PSMA', imaging: 'PET', trigger: 'Enzyme' },
+    imagingCore: false,
+    // No trigger: this card explicitly says release triggers do not apply to a
+    // matrix. Loading one would contradict the guide and mislead the model.
+    prefill: { disease: 'prostate cancer', receptor: 'PSMA', drug: 'Docetaxel', imaging: ['PET'],
+               trigger: [], sizeRange: '120–200 nm', adminRoute: 'Intravenous (IV)' },
+  },
+  {
+    key: 'inorganic_core_ligand',
+    name: 'Inorganic Core + Ligand',
+    when: 'Photothermal therapy or strong imaging contrast.',
+    size: '20–100 nm',
+    triggers: 'Light, Redox',
+    examples: 'NanoTherm (EU-approved for glioblastoma); AuroLase.',
+    watch: 'The core is solid — the drug rides on the <strong>surface only</strong>, so loading is low.',
+    example: { drug: 'Doxorubicin', receptor: 'EGFR', imaging: 'Photoacoustic', trigger: 'Light' },
+    imagingCore: false,
+    prefill: { disease: 'head and neck squamous cell carcinoma', receptor: 'EGFR', drug: 'Doxorubicin',
+               imaging: ['Photoacoustic'], trigger: ['Light'], sizeRange: '50–100 nm', adminRoute: 'Intratumoral' },
+  },
+  {
+    key: 'dendrimer',
+    name: 'Dendrimer',
+    when: 'High drug loading with multivalent targeting; gene delivery.',
+    size: '5–15 nm',
+    triggers: 'pH, Enzyme',
+    examples: 'VivaGel (approved in several markets).',
+    watch: 'Very small — may clear through the kidneys before reaching a tumour.',
+    example: { drug: 'siRNA', receptor: 'CD44', imaging: 'Fluorescence', trigger: 'Enzyme' },
+    imagingCore: false,
+    prefill: { disease: 'glioblastoma', receptor: 'CD44', drug: 'siRNA', imaging: ['Fluorescence'],
+               trigger: ['Enzyme'], sizeRange: '50–100 nm', adminRoute: 'Intravenous (IV)' },
+  },
+];
+
+// Icon colors tuned for the dark UI. Deliberately the same palette shape the
+// model supplies at generation time, so an icon reads like a real output.
+const REF_COLORS = { core: '#B5754A', shell: '#93B4D8', gate: '#E8B84B', surface: '#4FC3F7', payload: '#FF6B6B' };
+
+// Reuse the production renderer, cropped to the particle (labels excluded).
+function archIconSVG(entry) {
+  const render = ARCH_RENDERERS[entry.key];
+  if (!render) return '';
+  const { shapes } = render(REF_COLORS, entry.example, entry.imagingCore);
+  const pad = 6;
+  const x = GEO.cx - GEO.R_MAX - pad;
+  const y = GEO.cy - GEO.R_MAX - pad;
+  const size = (GEO.R_MAX + pad) * 2;
+  return `<svg viewBox="${x} ${y} ${size} ${size}" width="100%" height="100%"
+    xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${entry.name} cross-section">${shapes}</svg>`;
+}
+
+function renderArchRef() {
+  document.getElementById('archModalBody').innerHTML = ARCH_REFERENCE.map((e, i) => `
+    <div class="arch-card">
+      <div class="arch-left">
+        <div class="arch-icon">${archIconSVG(e)}</div>
+        <button class="arch-load" onclick="loadArchExample(${i})">Load example →</button>
+      </div>
+      <div class="arch-info">
+        <div class="arch-name">${e.name}</div>
+        <div class="arch-when">${e.when}</div>
+        <div class="arch-meta">
+          <span class="arch-chip"><b>Size</b> ${e.size}</span>
+          <span class="arch-chip"><b>Trigger</b> ${e.triggers}</span>
+        </div>
+        <div class="arch-eg">${e.examples}</div>
+        <div class="arch-warn">${e.watch}</div>
+      </div>
+    </div>`).join('');
+}
+
+// Prefills the whole form with a coherent worked example. Aimed at someone told
+// to "make a nanoparticle" with nobody to ask — a working starting point they can
+// modify beats a blank form they can't interpret.
+function loadArchExample(i) {
+  const p = ARCH_REFERENCE[i].prefill;
+  if (!p) return;
+  document.getElementById('disease').value  = p.disease;
+  document.getElementById('receptor').value = p.receptor;
+  document.getElementById('drug').value     = p.drug;
+
+  const setSelect = (id, want) => {
+    const sel = document.getElementById(id);
+    for (const o of sel.options) if (o.text === want) { o.selected = true; return; }
+  };
+  setSelect('sizeRange', p.sizeRange);
+  setSelect('adminRoute', p.adminRoute);
+
+  // Pin the topology this card is demonstrating. Without this the model re-infers
+  // the architecture from the parameters and can pick a different one entirely —
+  // which is exactly what made the "Polymer Matrix" example generate an MSN.
+  document.getElementById('archChoice').value = ARCH_REFERENCE[i].key;
+
+  // Tag groups are multi-select buttons — clear, then activate only the wanted ones
+  const setTags = (containerId, wanted) => {
+    document.getElementById(containerId).querySelectorAll('.tag-btn').forEach(b => {
+      b.classList.toggle('active', wanted.includes(b.textContent.trim()));
+    });
+  };
+  setTags('imagingTags', p.imaging);
+  setTags('triggerTags', p.trigger);
+
+  closeArchRef();
+}
+
+function openArchRef() {
+  renderArchRef();   // render on open so icons always reflect current renderers
+  document.getElementById('archModal').classList.add('open');
+}
+function closeArchRef() {
+  document.getElementById('archModal').classList.remove('open');
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeArchRef();
+});
+
+function toggleTag(btn) { btn.classList.toggle('active'); }
+function toggleKey() {
+  const inp = document.getElementById('apiKey');
+  const btn = event.target;
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
+  else { inp.type = 'password'; btn.textContent = 'Show'; }
+}
+function getActive(id) {
+  return Array.from(document.querySelectorAll(`#${id} .tag-btn.active`)).map(b => b.textContent).join(', ');
+}
+function val(id) { return document.getElementById(id).value.trim(); }
+
+async function generate() {
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Designing...';
+
+  const params = {
+    disease: val('disease'), receptor: val('receptor'), drug: val('drug'),
+    imaging: getActive('imagingTags'), trigger: getActive('triggerTags'),
+    architecture: val('archChoice'),
+    size: val('sizeRange'), route: val('adminRoute'), lit: val('litContext')
+  };
+
+  document.getElementById('output').innerHTML = `
+    <div class="out-card">
+      <div class="out-card-header">◎ Generating design...</div>
+      <div class="out-card-body">
+        <div class="loading-bar"><div class="loading-bar-inner"></div></div>
+        <p style="font-size:12px;color:var(--muted);margin-top:12px;font-family:var(--mono)">
+          Analyzing parameters and synthesizing nanoparticle design...
+        </p>
+      </div>
+    </div>`;
+
+  try {
+    const resp = await fetch('/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: val('apiKey'), params })
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error);
+    // /generate now returns both literature sets, so no separate /literature call
+    // is needed — that second request re-ran the identical PubMed query.
+    renderDesign(data.design, data.sources || {}, data.bibliography || {}, params);
+  } catch(e) {
+    document.getElementById('output').innerHTML = `
+      <div class="error-msg"><strong>Error:</strong> ${e.message}</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = '⬡ Generate Nanoparticle Design';
+}
+
+function claimSpan(claim, sources) {
+  // claim = {text, provenance, source} — renders highlighted span + citation link if grounded
+  if (!claim || typeof claim !== 'object') return claim || '';
+  const prov = claim.provenance === 'grounded' ? 'grounded' : 'extrapolated';
+  const text = claim.text || '';
+  let citeHTML = '';
+  if (prov === 'grounded' && claim.source && sources[claim.source]) {
+    const src = sources[claim.source];
+    // Numeric marker (superscript), matching journal convention and the PDF's
+    // reference numbering — rather than the internal "S1" tag.
+    const marker = src.n || claim.source;
+    citeHTML = `<sup><a class="cite-link" href="${src.url}" target="_blank" rel="noopener" title="${src.title}">${marker}</a></sup>`;
+  }
+  return `<span class="claim ${prov}">${text}</span>${citeHTML}`;
+}
+
+// The model is asked for a SHORT diameter ("~105 nm"), but it drifts and has
+// returned entire paragraphs here — which overflowed the SVG caption and turned
+// the card header into a wall of text. Never trust this field's length: extract
+// the first measurement for any compact display. The full text is still shown
+// verbatim in the Composition table's Diameter row, so nothing is lost.
+function shortDiameter(text) {
+  if (!text) return '';
+  const t = String(text).trim();
+  if (t.length <= 24) return t;
+  const m = t.match(/[~≈<>]?\s*\d+(?:\.\d+)?\s*(?:[–—-]\s*\d+(?:\.\d+)?)?\s*(?:nm|µm|um)/i);
+  if (m) return m[0].replace(/\s+/g, ' ').trim();
+  return t.slice(0, 24).trimEnd() + '…';
+}
+
+// Prefer the structured layer_stack the model now emits; fall back to parsing a
+// trailing "(a + b + c)" out of the diameter string for nonconforming responses.
+function resolveLayerStack(d, diameterText) {
+  if (Array.isArray(d.layer_stack) && d.layer_stack.length) {
+    const rows = d.layer_stack
+      .filter(it => it && it.material)
+      .map(it => [String(it.thickness || '—').trim(), String(it.material).trim()]);
+    if (rows.length) return rows;
+  }
+  if (!diameterText) return [];
+  const m = String(diameterText).trim().match(/^.*?\((.*)\)\s*$/s);
+  if (!m) return [];
+  const parts = m[1].split('+').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return [];
+  return parts.map(p => {
+    const lm = p.match(/^([~≈<>]?\s*[\d.]+\s*(?:[–—-]\s*[\d.]+)?\s*(?:nm|µm|um))\s+(.*)$/i);
+    return lm ? [lm[1].trim(), lm[2].trim()] : ['—', p];
+  });
+}
+
+function legendHTML() {
+  return `
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch grounded"></div> Grounded in cited literature</div>
+      <div class="legend-item"><div class="legend-swatch extrapolated"></div> Extrapolated (AI reasoning, not directly sourced)</div>
+    </div>`;
+}
+
+function renderDesign(d, sources, bibliography, params) {
+  const c = d.composition;
+  const sc = d.svgColors || { core:'#8B6355', shell:'#4CAF50', gate:'#FF6B6B', surface:'#2196F3' };
+  // buildSVG only needs plain text for labels, so extract .text where the field is a claim object
+  const cText = {
+    core: c.core?.text || c.core, shell: c.shell?.text || c.shell,
+    payload: c.payload?.text || c.payload, surface: c.surface?.text || c.surface,
+    gate: c.gate?.text || c.gate, diameter: c.diameter?.text || c.diameter,
+  };
+  const architecture = d.architecture || 'mesoporous_core_shell';
+  const hasImagingCore = !!d.imaging_core;
+  const svg = buildSVG(cText, sc, params, architecture, hasImagingCore);
+
+  const steps = d.synthesis.map((s,i) => `
+    <div class="step">
+      <div class="step-num">${i+1}</div>
+      <div class="step-text"><strong>${s.step}</strong>${claimSpan({text: s.detail, provenance: s.provenance, source: s.source}, sources)}</div>
+    </div>`).join('');
+
+  const rationaleHTML = Array.isArray(d.rationale)
+    ? d.rationale.map(r => `<p style="margin-bottom:6px">${claimSpan(r, sources)}</p>`).join('')
+    : `<p>${d.rationale}</p>`; // fallback for any legacy plain-string response
+
+  // Layer stack: structured if the model provided it, parsed as a fallback,
+  // omitted entirely if neither yields anything usable.
+  const stackRows = resolveLayerStack(d, cText.diameter);
+  const stackHTML = stackRows.length ? `
+    <div class="layer-stack">
+      ${stackRows.map(([thickness, material], i) => `
+        <div class="layer-row">
+          <span class="layer-idx">${i + 1}</span>
+          <span class="layer-thick">${thickness}</span>
+          <span class="layer-mat">${material}</span>
+        </div>`).join('')}
+    </div>` : '';
+
+  // ── Bibliography: two functionally distinct sections, one shared numbering ──
+  //   Most Similar Published Designs = closest published NANOPARTICLE FORMULATIONS
+  //     (prior art the researcher may want to check before committing to this design)
+  //   References = sources the model actually consulted when grounding its claims
+  // A paper appears in exactly one section; superscript citations resolve into
+  // whichever section holds that number.
+  const similar = (bibliography && bibliography.similar) || [];
+  const references = (bibliography && bibliography.references) || [];
+
+  const similarHTML = similar.length ? `
+    <div class="out-card">
+      <div class="out-card-header">⌕ Most Similar Published Designs</div>
+      <div class="out-card-body">
+        <div class="lit-note">Published nanoparticle formulations closest to this target and payload — prior art worth checking before committing to a design.</div>
+        <div class="lit-list">${similar.map(citationHTML).join('')}</div>
+        ${bibliography.similar_query ? `<div class="lit-query">Search: ${bibliography.similar_query}</div>` : ''}
+      </div>
+    </div>` : `
+    <div class="out-card">
+      <div class="out-card-header">⌕ Most Similar Published Designs</div>
+      <div class="out-card-body">
+        <div class="lit-empty">No published nanoparticle formulations were found for this target and payload. That may indicate genuinely unexplored design space — or simply that the search terms are too narrow.</div>
+      </div>
+    </div>`;
+
+  const referencesHTML = references.length ? `
+    <div class="out-card">
+      <div class="out-card-header">§ References</div>
+      <div class="out-card-body">
+        <div class="lit-note">Sources consulted by the model when grounding the claims above.</div>
+        <div class="lit-list">${references.map(citationHTML).join('')}</div>
+      </div>
+    </div>` : (similar.length ? `
+    <div class="out-card">
+      <div class="out-card-header">§ References</div>
+      <div class="out-card-body">
+        <div class="lit-empty">All cited sources are listed under Most Similar Published Designs above and are not repeated here.</div>
+      </div>
+    </div>` : '');
+
+  // Order: Diagram → Composition → Synthesis Protocol → Related Literature (loading) → Design Rationale (last)
+  const generatedAt = new Date().toLocaleString();
+  document.getElementById('output').innerHTML = `
+    <div class="export-bar">
+      <div class="export-meta">Generated ${generatedAt}</div>
+      <button class="export-btn" id="exportBtnTop" onclick="exportPDF()">⬇ Export as PDF</button>
+    </div>
+    <div class="out-card">
+      <div class="out-card-header">◎ Nanoparticle Diagram <span class="arch-tag">${ARCH_NAMES[architecture] || architecture}</span></div>
+      <div class="out-card-body">
+        <div class="dia-callout">
+          <span class="dia-value">${shortDiameter(cText.diameter) || params.size}</span>
+          <span class="dia-label">total diameter</span>
+        </div>
+        ${stackHTML}
+        <div class="np-canvas">${svg}</div>
+      </div>
+    </div>
+    <div class="out-card">
+      <div class="out-card-header">◈ Composition</div>
+      ${legendHTML()}
+      <div class="out-card-body">
+        <div class="comp-grid">
+          <div class="comp-item"><div class="ci-label">Core</div><div class="ci-value">${claimSpan(c.core, sources)}</div></div>
+          <div class="comp-item"><div class="ci-label">Shell</div><div class="ci-value">${claimSpan(c.shell, sources)}</div></div>
+          <div class="comp-item"><div class="ci-label">Payload</div><div class="ci-value">${claimSpan(c.payload, sources)}</div></div>
+          <div class="comp-item"><div class="ci-label">Surface</div><div class="ci-value">${claimSpan(c.surface, sources)}</div></div>
+          <div class="comp-item"><div class="ci-label">Release Gate</div><div class="ci-value">${claimSpan(c.gate, sources)}</div></div>
+          <div class="comp-item"><div class="ci-label">Diameter</div><div class="ci-value">${claimSpan(c.diameter, sources)}</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="out-card">
+      <div class="out-card-header">⚗ Synthesis Protocol</div>
+      ${legendHTML()}
+      <div class="out-card-body"><div class="steps-list">${steps}</div></div>
+    </div>
+    ${similarHTML}
+    <div class="out-card">
+      <div class="out-card-header">⟁ Design Rationale</div>
+      ${legendHTML()}
+      <div class="out-card-body"><div class="rationale">${rationaleHTML}</div></div>
+    </div>
+    ${referencesHTML}
+    <div class="export-row">
+      <button class="export-btn" id="exportBtn" onclick="exportPDF()">⬇ Export as PDF Report</button>
+    </div>`;
+
+  // Stash everything exportPDF() needs — design/sources from the API response,
+  // params from the form, and the SVG markup so the backend can rasterize it
+  // (reportlab has no native SVG support, so this happens server-side).
+  window._lastDesign = d;
+  window._lastSources = sources;
+  window._lastBibliography = bibliography;
+  window._lastParams = params;
+  window._lastSVG = svg;
+}
+
+async function exportPDF() {
+  // Two buttons (one above the diagram, one below the rationale) both call
+  // this — disable/restore both together so the UI stays consistent no
+  // matter which one was clicked.
+  const buttons = [document.getElementById('exportBtnTop'), document.getElementById('exportBtn')].filter(Boolean);
+  const originalTexts = buttons.map(b => b.textContent);
+  buttons.forEach(b => { b.disabled = true; b.textContent = '⏳ Building PDF...'; });
+
+  try {
+    const resp = await fetch('/export-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        design: window._lastDesign,
+        sources: window._lastSources,
+        bibliography: window._lastBibliography,
+        params: window._lastParams,
+        svg: window._lastSVG,
+      })
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: 'Export failed' }));
+      throw new Error(err.error || 'Export failed');
+    }
+    const blob = await resp.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    // Pull the filename the server suggested, if available, otherwise fall back
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    a.download = match ? match[1] : 'nanosynth_design.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('PDF export failed: ' + e.message);
+  }
+  buttons.forEach((b, i) => { b.disabled = false; b.textContent = originalTexts[i]; });
+}
+
+// Renders one bibliography entry in Vancouver (ICMJE) style — the convention
+// PubMed itself uses — so the on-screen lists and the exported PDF agree exactly.
+// The number is GLOBAL across both sections, so a superscript citation always
+// resolves to exactly one entry, wherever it happens to be listed.
+function citationHTML(p) {
+  const authors = (p.author_list && p.author_list.length)
+    ? (p.author_list.length <= 6
+        ? p.author_list.join(', ')
+        : p.author_list.slice(0, 6).join(', ') + ', et al')
+    : (p.authors || '');
+  const journal = p.journal_abbrev || p.journal || '';
+  let locator = p.year || '';
+  if (p.volume) {
+    locator += `;${p.volume}`;
+    if (p.issue) locator += `(${p.issue})`;
+    if (p.pages) locator += `:${p.pages}`;
+  } else if (p.pages) {
+    locator += `:${p.pages}`;
+  }
+  const title = (p.title || '').replace(/\.\s*$/, '');
+  return `
+    <div class="lit-item">
+      <div class="lit-num">${p.n}.</div>
+      <div class="lit-cite">
+        ${authors ? `<span class="lit-authors">${authors}.</span> ` : ''}
+        <a href="${p.url}" target="_blank" rel="noopener">${title}.</a>
+        ${journal ? `<span class="lit-journal">${journal}.</span> ` : ''}
+        ${locator ? `${locator}. ` : ''}
+        ${p.doi ? `doi:${p.doi}. ` : ''}
+        PMID: ${p.pmid}.
+      </div>
+    </div>`;
+}
+
+// Canonical forms for biomedical terms whose capitalization carries meaning.
+// A user typing "MRNA" or "mrna" should still see "mRNA" on a printed figure —
+// mangled casing (Mrna, Epcam, Ph) reads as sloppy in a research document.
+// Mirrors _CANONICAL_TERMS in app.py; keep the two in sync.
+const CANONICAL_TERMS = {
+  mrna:'mRNA', sirna:'siRNA', mirna:'miRNA', shrna:'shRNA', sgrna:'sgRNA',
+  grna:'gRNA', trna:'tRNA', rrna:'rRNA', sarna:'saRNA', aso:'ASO', asos:'ASOs',
+  rna:'RNA', dna:'DNA', pdna:'pDNA', cdna:'cDNA', crispr:'CRISPR', cas9:'Cas9',
+  epcam:'EpCAM', her2:'HER2', egfr:'EGFR', vegf:'VEGF', 'pd-l1':'PD-L1',
+  psma:'PSMA', cd44:'CD44', folr1:'FOLR1', trop2:'TROP2', muc1:'MUC1',
+  peg:'PEG', pegylated:'PEGylated', lnp:'LNP', lnps:'LNPs',
+  spion:'SPION', spions:'SPIONs', msn:'MSN', 'zif-8':'ZIF-8',
+  dspe:'DSPE', dopc:'DOPC', dotap:'DOTAP',
+  ph:'pH', ros:'ROS', mri:'MRI', pet:'PET', ct:'CT',
+  tnbc:'TNBC', gbm:'GBM', pdac:'PDAC', nsclc:'NSCLC', hcc:'HCC',
+  parp:'PARP', igg:'IgG', iv:'IV',
+};
+
+function canon(text) {
+  if (!text) return '';
+  return String(text).split(' ').map(token =>
+    token.split('-').map(part => {
+      const low = part.toLowerCase();
+      if (CANONICAL_TERMS[low]) return CANONICAL_TERMS[low];
+      // Existing internal capitals (EpCAM, Fe3O4) are assumed intentional
+      if (/[A-Z]/.test(part.slice(1))) return part;
+      return part;
+    }).join('-')
+  ).join(' ');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  NANOPARTICLE ARCHITECTURES
+//
+//  The figure is a 2D cross-section, so what must differ between designs is the
+//  TOPOLOGY — how the compartments are arranged — not the chemistry. Dozens of
+//  materials collapse onto seven layouts. Each renderer below draws its own
+//  compartments AND declares its own labels, because a label like "Mesoporous
+//  Shell" is meaningless on a lipid nanoparticle.
+//
+//  Every renderer must respect: the payload sits where the chemistry says it
+//  sits. Putting the drug in the wrong compartment is a scientific error, not a
+//  styling choice.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const GEO = {
+  W: 640, H: 380, cx: 320, cy: 185,
+  R_SURF: 78,      // particle surface for most topologies
+  R_PEG: 98,       // PEG chain tips
+  R_MAX: 116,      // antibodies extend furthest -> particle spans x 204..436
+  LTIP: 196, RTIP: 444,
+  LABEL_Y: [70, 118, 166],
+};
+GEO.LTEXT = GEO.LTIP - 8;
+GEO.RTEXT = GEO.RTIP + 8;
+
+const LABEL_MAX = 25;
+const fitLabel = s => (s && s.length > LABEL_MAX) ? s.slice(0, LABEL_MAX - 1).trimEnd() + '…' : (s || '');
+
+// Polar -> cartesian about the particle centre
+const P = (r, deg) => [GEO.cx + r * Math.cos(deg * Math.PI / 180),
+                       GEO.cy + r * Math.sin(deg * Math.PI / 180)];
+
+// ── Shared surface furniture ────────────────────────────────────────────────
+
+// Grafted PEG chains radiating from a surface radius. Drawn with a kink so they
+// read as flexible polymer rather than rigid spokes.
+function pegChains(rSurf, rTip, n, sc, opacity = 0.65) {
+  const len = rTip - rSurf;
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    const a = i * (360 / n);
+    const rad = a * Math.PI / 180;
+    const [bx, by] = P(rSurf, a);
+    const [tx, ty] = P(rTip, a);
+    const ux = Math.cos(rad), uy = Math.sin(rad);
+    const px = -Math.sin(rad), py = Math.cos(rad);
+    const c1x = bx + ux * len * 0.33 + px * 4.5, c1y = by + uy * len * 0.33 + py * 4.5;
+    const c2x = bx + ux * len * 0.67 - px * 4.5, c2y = by + uy * len * 0.67 - py * 4.5;
+    out += `<path d="M ${bx.toFixed(1)} ${by.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${tx.toFixed(1)} ${ty.toFixed(1)}" fill="none" stroke="${sc.surface}" stroke-width="1.5" stroke-opacity="${opacity}" stroke-linecap="round"/>`;
+  }
+  return out;
+}
+
+// Y-shaped IgG conjugated at the DISTAL end of a PEG chain (how targeting
+// ligands are actually attached). rotate(a-90) maps the glyph's local +y axis
+// onto the outward radial direction.
+function antibodies(rTip, angles, sc) {
+  return angles.map(a => {
+    const [ax, ay] = P(rTip, a);
+    return `<g transform="translate(${ax.toFixed(1)} ${ay.toFixed(1)}) rotate(${(a - 90).toFixed(1)})">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="${sc.surface}" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="0" y1="7" x2="-5.5" y2="15" stroke="${sc.surface}" stroke-width="1.8" stroke-linecap="round"/>
+      <line x1="0" y1="7" x2="5.5" y2="15" stroke="${sc.surface}" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="-5.5" cy="15" r="2.4" fill="${sc.surface}"/>
+      <circle cx="5.5" cy="15" r="2.4" fill="${sc.surface}"/>
+    </g>`;
+  }).join('');
+}
+
+// An inorganic imaging core inset at the centre. This is an orthogonal MODIFIER,
+// not its own architecture — a SPION can sit inside an LNP, a liposome, a
+// micelle, a matrix or a dendrimer without changing that carrier's topology.
+function imagingCore(r, sc) {
+  return `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${r}" fill="${sc.core}" stroke="${sc.core}" stroke-width="1.2"/>
+    <circle cx="${GEO.cx - r * 0.28}" cy="${GEO.cy - r * 0.3}" r="${r * 0.3}" fill="#ffffff" fill-opacity="0.16"/>`;
+}
+
+const dot = (x, y, col, r = 3.1, op = 0.95) =>
+  `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${col}" fill-opacity="${op}"/>`;
+
+// Deterministic scatter — same design always renders identically (no RNG), while
+// still looking irregular rather than gridded.
+function scatter(count, rMin, rMax, seed = 1) {
+  const pts = [];
+  let s = seed;
+  const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  for (let i = 0; i < count; i++) {
+    const a = rnd() * 360;
+    const r = rMin + Math.sqrt(rnd()) * (rMax - rMin);  // sqrt -> uniform by area
+    pts.push(P(r, a));
+  }
+  return pts;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  1. MESOPOROUS CORE–SHELL  (MSN, magnetic MSN)
+//     Solid core; shell pierced by radial mesopores; drug INSIDE the pores;
+//     gates capping the pore mouths.
+// ═══════════════════════════════════════════════════════════════════════════
+function archMesoporous(sc, params, hasImagingCore) {
+  const rCore = 40, rShell = 78, pay = sc.payload;
+  const poreAngles = Array.from({length: 8}, (_, i) => i * 45 + 22.5);
+  const poreW = 11;
+
+  let s = pegChains(rShell, GEO.R_PEG, 16, sc);
+  s += antibodies(GEO.R_PEG, [-112.5, -45, 22.5, 90, 157.5, 225], sc);
+
+  // silica matrix ring
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${(rCore + rShell) / 2}" fill="none" stroke="${sc.shell}" stroke-width="${rShell - rCore}" stroke-opacity="0.42"/>`;
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rShell}" fill="none" stroke="${sc.shell}" stroke-width="1.1" stroke-opacity="0.85"/>`;
+
+  // mesopore channels cut through the shell
+  poreAngles.forEach(a => {
+    const [px, py] = P((rCore + rShell) / 2, a);
+    const len = rShell - rCore;
+    s += `<rect x="${(px - len/2).toFixed(1)}" y="${(py - poreW/2).toFixed(1)}" width="${len.toFixed(1)}" height="${poreW}" rx="${poreW/2}" transform="rotate(${a.toFixed(1)} ${px.toFixed(1)} ${py.toFixed(1)})" fill="rgba(255,255,255,0.14)" stroke="${sc.shell}" stroke-width="0.9"/>`;
+  });
+  // payload INSIDE the pores
+  poreAngles.forEach(a => [0.36, 0.68].forEach(t => {
+    const [dx, dy] = P(rCore + (rShell - rCore) * t, a);
+    s += dot(dx, dy, pay);
+  }));
+  // gates capping each pore mouth
+  poreAngles.forEach(a => {
+    const [gx, gy] = P(rShell, a);
+    s += `<g transform="rotate(${a.toFixed(1)} ${gx.toFixed(1)} ${gy.toFixed(1)})"><rect x="${(gx-2.5).toFixed(1)}" y="${(gy-7).toFixed(1)}" width="5" height="14" rx="2.2" fill="${sc.gate}" stroke="#ffffff" stroke-width="0.7" stroke-opacity="0.55"/></g>`;
+  });
+  // solid core last, over the inner pore mouths
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rCore}" fill="${sc.core}" stroke="${sc.core}" stroke-width="1.2"/>`;
+  s += `<circle cx="${GEO.cx - rCore*0.28}" cy="${GEO.cy - rCore*0.3}" r="${rCore*0.3}" fill="#ffffff" fill-opacity="0.16"/>`;
+
+  return {
+    shapes: s,
+    labels: [
+      ['L', `${canon(params.imaging)} Core`,  225,  rCore * 0.55],
+      ['L', 'Mesoporous Shell',               180,  (rCore + rShell) / 2],
+      ['L', `${canon(params.drug)} in Pores`, 202.5, rCore + (rShell - rCore) * 0.5],
+      ['R', `${canon(params.receptor)} Antibody`, -45, GEO.R_PEG + 10],
+      ['R', 'PEG Corona',                     0,     rShell + 10],
+      ['R', `${canon(params.trigger)} Gate`,  67.5,  rShell],
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  2. VESICLE  (liposome, polymersome, exosome, membrane-coated)
+//     A true BILAYER enclosing a HOLLOW AQUEOUS LUMEN. Hydrophilic drug sits in
+//     the lumen; hydrophobic drug partitions INTO the bilayer. This is NOT an
+//     LNP — the lumen is the whole point of the distinction.
+// ═══════════════════════════════════════════════════════════════════════════
+function archVesicle(sc, params, hasImagingCore) {
+  const rIn = 60, rOut = 78, pay = sc.payload;
+  const rMid = (rIn + rOut) / 2;
+
+  let s = pegChains(rOut, GEO.R_PEG, 16, sc);
+  s += antibodies(GEO.R_PEG, [-112.5, -45, 22.5, 90, 157.5, 225], sc);
+
+  // aqueous lumen
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rIn}" fill="rgba(255,255,255,0.14)" stroke="none"/>`;
+  // bilayer ring
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rMid}" fill="none" stroke="${sc.shell}" stroke-width="${rOut - rIn}" stroke-opacity="0.45"/>`;
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rOut}" fill="none" stroke="${sc.shell}" stroke-width="1.1" stroke-opacity="0.9"/>`;
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rIn}" fill="none" stroke="${sc.shell}" stroke-width="1.1" stroke-opacity="0.9"/>`;
+
+  // Phospholipid head groups on BOTH faces — this is what makes it read as a
+  // bilayer rather than a plain thick ring.
+  const N = 40;
+  for (let i = 0; i < N; i++) {
+    const a = i * (360 / N);
+    const [ox, oy] = P(rOut, a);
+    const [ix, iy] = P(rIn, a);
+    s += `<circle cx="${ox.toFixed(1)}" cy="${oy.toFixed(1)}" r="2.5" fill="${sc.shell}" fill-opacity="0.95"/>`;
+    s += `<circle cx="${ix.toFixed(1)}" cy="${iy.toFixed(1)}" r="2.5" fill="${sc.shell}" fill-opacity="0.95"/>`;
+  }
+
+  // Hydrophilic payload dissolved in the LUMEN
+  scatter(14, 8, rIn - 12, 7).forEach(([x, y]) => { s += dot(x, y, pay); });
+  // A few hydrophobic molecules partitioned INTO the bilayer
+  [30, 105, 195, 285].forEach(a => { const [x, y] = P(rMid, a); s += dot(x, y, sc.gate, 2.8); });
+
+  if (hasImagingCore) s += imagingCore(22, sc);
+
+  return {
+    shapes: s,
+    labels: [
+      hasImagingCore
+        ? ['L', `${canon(params.imaging)} Core`, 225, 12]
+        : ['L', 'Aqueous Lumen',                 200, rIn * 0.45],
+      ['L', 'Lipid Bilayer',                     165, rMid],
+      ['L', `${canon(params.drug)} in Lumen`,    250, rIn * 0.6],
+      ['R', `${canon(params.receptor)} Antibody`, -45, GEO.R_PEG + 10],
+      ['R', 'PEG Corona',                        0,   rOut + 10],
+      ['R', `${canon(params.trigger)} Lipid`,    45,  rMid],
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  3. LIPID NANOPARTICLE  (mRNA/siRNA carriers)
+//     NO LUMEN. Nucleic acid complexed with ionizable lipid throughout a DENSE
+//     interior. PEG-lipid at the surface. Conflating this with a liposome is the
+//     single most common structural error in nanomedicine figures.
+// ═══════════════════════════════════════════════════════════════════════════
+function archLNP(sc, params, hasImagingCore) {
+  const rOut = 78, pay = sc.payload;
+
+  let s = pegChains(rOut, GEO.R_PEG, 18, sc);
+  s += antibodies(GEO.R_PEG, [-112.5, -45, 22.5, 90, 157.5, 225], sc);
+
+  // Dense ionizable-lipid interior — solid, no lumen
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rOut}" fill="${sc.shell}" fill-opacity="0.35" stroke="${sc.shell}" stroke-width="1.2" stroke-opacity="0.9"/>`;
+
+  // Nucleic acid strands complexed through the interior (wavy, not dots — mRNA
+  // is a long polymer, and drawing it as discrete molecules misrepresents it)
+  const strands = [
+    [-40, -30, 20, -55, 45, -10], [-50, 20, -10, 45, 40, 30],
+    [-15, -8, 25, 12, 52, -22],   [-46, -4, -18, 26, 8, 52],
+    [10, 35, 45, 50, 58, 18],
+  ];
+  strands.forEach(([x1, y1, x2, y2, x3, y3]) => {
+    s += `<path d="M ${GEO.cx + x1} ${GEO.cy + y1} Q ${GEO.cx + x2} ${GEO.cy + y2}, ${GEO.cx + x3} ${GEO.cy + y3}" fill="none" stroke="${pay}" stroke-width="2.6" stroke-opacity="0.95" stroke-linecap="round"/>`;
+  });
+  // Ionizable lipid molecules complexed along the strands
+  scatter(16, 10, rOut - 16, 3).forEach(([x, y]) => { s += dot(x, y, sc.gate, 2.6, 0.85); });
+
+  // Phospholipid/PEG-lipid monolayer at the surface (single layer, not a bilayer)
+  const N = 34;
+  for (let i = 0; i < N; i++) {
+    const a = i * (360 / N);
+    const [ox, oy] = P(rOut, a);
+    s += `<circle cx="${ox.toFixed(1)}" cy="${oy.toFixed(1)}" r="2.6" fill="${sc.shell}" fill-opacity="1"/>`;
+  }
+
+  if (hasImagingCore) s += imagingCore(24, sc);
+
+  return {
+    shapes: s,
+    labels: [
+      hasImagingCore
+        ? ['L', `${canon(params.imaging)} Core`, 225, 13]
+        : ['L', 'Ionizable Lipid',               210, rOut * 0.45],
+      ['L', 'Lipid Monolayer',                   165, rOut],
+      ['L', `${canon(params.drug)} Complexed`,   255, rOut * 0.5],
+      ['R', `${canon(params.receptor)} Ligand`,  -45, GEO.R_PEG + 10],
+      ['R', 'PEG-Lipid Corona',                  0,   rOut + 10],
+      ['R', 'Endosomal Escape',                  50,  rOut * 0.62],
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  4. MICELLE  (polymeric / block copolymer)
+//     A single MONOLAYER corona — not a bilayer. Poorly-soluble drug is
+//     DISSOLVED throughout the hydrophobic core.
+// ═══════════════════════════════════════════════════════════════════════════
+function archMicelle(sc, params, hasImagingCore) {
+  const rCore = 54, pay = sc.payload;
+  const rTip = GEO.R_PEG;
+
+  // Amphiphile chains: hydrophobic tail anchored in the core, hydrophilic block
+  // forming the corona. One layer only.
+  let s = '';
+  const N = 26;
+  for (let i = 0; i < N; i++) {
+    const a = i * (360 / N);
+    const rad = a * Math.PI / 180;
+    const [bx, by] = P(rCore, a);
+    const [tx, ty] = P(rTip, a);
+    const ux = Math.cos(rad), uy = Math.sin(rad);
+    const px = -Math.sin(rad), py = Math.cos(rad);
+    const len = rTip - rCore;
+    const c1x = bx + ux * len * 0.3 + px * 6, c1y = by + uy * len * 0.3 + py * 6;
+    const c2x = bx + ux * len * 0.7 - px * 6, c2y = by + uy * len * 0.7 - py * 6;
+    s += `<path d="M ${bx.toFixed(1)} ${by.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${tx.toFixed(1)} ${ty.toFixed(1)}" fill="none" stroke="${sc.surface}" stroke-width="1.6" stroke-opacity="0.7" stroke-linecap="round"/>`;
+    s += `<circle cx="${bx.toFixed(1)}" cy="${by.toFixed(1)}" r="2.6" fill="${sc.surface}" fill-opacity="0.9"/>`;
+  }
+  s += antibodies(rTip, [-112.5, -45, 22.5, 90, 157.5, 225], sc);
+
+  // Hydrophobic core with drug DISSOLVED in it (dispersed, not compartmented)
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rCore}" fill="${sc.shell}" fill-opacity="0.5" stroke="${sc.shell}" stroke-width="1.2"/>`;
+  scatter(15, 6, rCore - 9, 11).forEach(([x, y]) => { s += dot(x, y, pay); });
+
+  if (hasImagingCore) s += imagingCore(20, sc);
+
+  return {
+    shapes: s,
+    labels: [
+      hasImagingCore
+        ? ['L', `${canon(params.imaging)} Core`,  225, 11]
+        : ['L', 'Hydrophobic Core',               205, rCore * 0.5],
+      ['L', 'Amphiphile Monolayer',               165, rCore],
+      ['L', `${canon(params.drug)} Dissolved`,    255, rCore * 0.55],
+      ['R', `${canon(params.receptor)} Antibody`, -45, rTip + 10],
+      ['R', 'Hydrophilic Corona',                 0,   rCore + (rTip - rCore) * 0.5],
+      ['R', `${canon(params.trigger)} Linker`,    50,  rCore],
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  5. POLYMER MATRIX  (PLGA, albumin, nanogel, SLN)
+//     Drug dispersed HOMOGENEOUSLY through a degradable matrix. There are no
+//     discrete compartments at all — that absence is the defining feature.
+// ═══════════════════════════════════════════════════════════════════════════
+function archMatrix(sc, params, hasImagingCore) {
+  const rOut = 80, pay = sc.payload;
+
+  let s = pegChains(rOut, GEO.R_PEG, 16, sc);
+  s += antibodies(GEO.R_PEG, [-112.5, -45, 22.5, 90, 157.5, 225], sc);
+
+  // Homogeneous matrix
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rOut}" fill="${sc.shell}" fill-opacity="0.4" stroke="${sc.shell}" stroke-width="1.2" stroke-opacity="0.9"/>`;
+  // Polymer chain texture, so it reads as a matrix rather than a void
+  scatter(26, 8, rOut - 8, 23).forEach(([x, y], i) => {
+    s += `<path d="M ${(x-6).toFixed(1)} ${y.toFixed(1)} q 3 ${i % 2 ? -4 : 4}, 6 0 q 3 ${i % 2 ? 4 : -4}, 6 0" fill="none" stroke="${sc.shell}" stroke-width="1" stroke-opacity="0.55"/>`;
+  });
+  // Drug dispersed uniformly throughout — the whole point of this topology
+  scatter(22, 8, rOut - 10, 5).forEach(([x, y]) => { s += dot(x, y, pay, 2.9); });
+
+  if (hasImagingCore) s += imagingCore(22, sc);
+
+  return {
+    shapes: s,
+    labels: [
+      hasImagingCore
+        ? ['L', `${canon(params.imaging)} Core`,   225, 12]
+        : ['L', 'Polymer Matrix',                  205, rOut * 0.5],
+      ['L', 'Degradable Matrix',                   165, rOut * 0.8],
+      ['L', `${canon(params.drug)} Dispersed`,     250, rOut * 0.55],
+      ['R', `${canon(params.receptor)} Antibody`,  -45, GEO.R_PEG + 10],
+      ['R', 'PEG Corona',                          0,   rOut + 10],
+      ['R', 'Bulk Erosion Release',                50,  rOut * 0.7],
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  6. INORGANIC CORE + LIGAND MONOLAYER  (gold, quantum dot, upconversion)
+//     Dense core with NO interior payload. The drug is conjugated to the
+//     SURFACE via a (usually cleavable) linker. Drawing payload inside the core
+//     would be flatly wrong here.
+// ═══════════════════════════════════════════════════════════════════════════
+function archInorganic(sc, params, hasImagingCore) {
+  const rCore = 58, pay = sc.payload;
+  const rLink = 76;   // drug tethered out here, OUTSIDE the core
+
+  let s = pegChains(rCore, GEO.R_PEG, 14, sc, 0.55);
+  s += antibodies(GEO.R_PEG, [-112.5, -45, 22.5, 90, 157.5, 225], sc);
+
+  // Cleavable linkers carrying the drug, anchored on the core surface
+  const linkAngles = Array.from({length: 10}, (_, i) => i * 36 + 18);
+  linkAngles.forEach(a => {
+    const [bx, by] = P(rCore, a);
+    const [tx, ty] = P(rLink, a);
+    s += `<line x1="${bx.toFixed(1)}" y1="${by.toFixed(1)}" x2="${tx.toFixed(1)}" y2="${ty.toFixed(1)}" stroke="${sc.gate}" stroke-width="1.6" stroke-opacity="0.9"/>`;
+    s += dot(tx, ty, pay, 3.4);
+  });
+
+  // Dense inorganic core — no payload within it
+  s += `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="${rCore}" fill="${sc.core}" stroke="${sc.core}" stroke-width="1.2"/>`;
+  s += `<circle cx="${GEO.cx - rCore*0.3}" cy="${GEO.cy - rCore*0.32}" r="${rCore*0.32}" fill="#ffffff" fill-opacity="0.18"/>`;
+
+  return {
+    shapes: s,
+    labels: [
+      ['L', `${canon(params.imaging)} Core`,       205, rCore * 0.5],
+      ['L', 'Inorganic Core',                      160, rCore * 0.75],
+      ['L', `${canon(params.drug)} on Surface`,    234, rLink],
+      ['R', `${canon(params.receptor)} Antibody`,  -45, GEO.R_PEG + 10],
+      ['R', 'PEG Monolayer',                       0,   rCore + 12],
+      ['R', `${canon(params.trigger)} Linker`,     54,  (rCore + rLink) / 2],
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  7. DENDRIMER  (PAMAM, hyperbranched)
+//     Generational branching. Payload held BOTH in interior voids AND on the
+//     terminal groups — the dual location is the defining feature.
+// ═══════════════════════════════════════════════════════════════════════════
+function archDendrimer(sc, params, hasImagingCore) {
+  const pay = sc.payload;
+  const G = [0, 26, 50, 74];   // generation radii
+
+  let s = '';
+  const terminals = [];
+
+  // Recursive bifurcation: 6 primary branches -> 12 -> 24 terminals
+  function branch(a, gen) {
+    if (gen >= G.length - 1) { terminals.push(a); return; }
+    const [x1, y1] = P(G[gen], a);
+    const spread = 26 / (gen + 1);
+    [a - spread, a + spread].forEach(na => {
+      const [x2, y2] = P(G[gen + 1], na);
+      s += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${sc.shell}" stroke-width="${(2.4 - gen * 0.4).toFixed(1)}" stroke-opacity="0.85" stroke-linecap="round"/>`;
+      s += `<circle cx="${x2.toFixed(1)}" cy="${y2.toFixed(1)}" r="${(2.6 - gen * 0.3).toFixed(1)}" fill="${sc.shell}"/>`;
+      branch(na, gen + 1);
+    });
+  }
+  for (let i = 0; i < 6; i++) branch(i * 60, 0);
+
+  // Payload in the interior voids
+  scatter(10, 14, 58, 13).forEach(([x, y]) => { s += dot(x, y, pay, 2.8); });
+  // Payload conjugated to the terminal groups
+  terminals.forEach(a => {
+    const [tx, ty] = P(G[G.length - 1] + 6, a);
+    s += dot(tx, ty, pay, 2.6, 0.9);
+  });
+  // Surface PEG + targeting
+  s += pegChains(G[G.length - 1] + 8, GEO.R_PEG, 12, sc, 0.5);
+  s += antibodies(GEO.R_PEG, [-112.5, -45, 22.5, 90, 157.5, 225], sc);
+
+  // Dendrimer core. With an imaging core requested this becomes a true inorganic
+  // inset (a dendrimer-coated SPION — branches grown from the particle surface),
+  // which is a real architecture and what the reference sheet promises. Without
+  // one it stays the small branching origin.
+  s += hasImagingCore
+    ? imagingCore(14, sc)
+    : `<circle cx="${GEO.cx}" cy="${GEO.cy}" r="10" fill="${sc.core}" stroke="${sc.core}" stroke-width="1.2"/>`;
+
+  return {
+    shapes: s,
+    labels: [
+      ['L', hasImagingCore ? `${canon(params.imaging)} Core` : 'Dendrimer Core', 210, 6],
+      ['L', 'Branch Generations',                  165, G[2]],
+      ['L', `${canon(params.drug)} in Voids`,      250, 40],
+      ['R', `${canon(params.receptor)} Antibody`,  -45, GEO.R_PEG + 10],
+      ['R', 'PEG Corona',                          0,   G[3] + 14],
+      ['R', 'Terminal Groups',                     54,  G[3] + 6],
+    ],
+  };
+}
+
+const ARCH_RENDERERS = {
+  mesoporous_core_shell: archMesoporous,
+  vesicle:               archVesicle,
+  lipid_nanoparticle:    archLNP,
+  micelle:               archMicelle,
+  polymer_matrix:        archMatrix,
+  inorganic_core_ligand: archInorganic,
+  dendrimer:             archDendrimer,
+};
+
+const ARCH_NAMES = {
+  mesoporous_core_shell: 'Mesoporous Core–Shell',
+  vesicle:               'Vesicle (Bilayer + Lumen)',
+  lipid_nanoparticle:    'Lipid Nanoparticle',
+  micelle:               'Polymeric Micelle',
+  polymer_matrix:        'Polymer Matrix',
+  inorganic_core_ligand: 'Inorganic Core + Ligand',
+  dendrimer:             'Dendrimer',
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Dispatcher — common frame, architecture-specific interior
+// ═══════════════════════════════════════════════════════════════════════════
+function buildSVG(c, sc, params, architecture, hasImagingCore) {
+  const colors = {
+    core:    sc.core    || '#8B5A2B',
+    shell:   sc.shell   || '#C8CDD4',
+    gate:    sc.gate    || '#E8B84B',
+    surface: sc.surface || '#2F80ED',
+    payload: sc.payload || sc.gate || '#E5533D',
+  };
+  const render = ARCH_RENDERERS[architecture] || ARCH_RENDERERS.mesoporous_core_shell;
+  const { shapes, labels } = render(colors, params, !!hasImagingCore);
+
+  // Assign label positions: left labels read inward, right labels read outward,
+  // each anchored AT its leader-line tip so the eye hops straight from feature to
+  // text. fitLabel() truncates free-text fields so a long receptor or drug name
+  // can never overflow the canvas or cross back over the artwork.
+  let li = 0, ri = 0;
+  const labelSVG = labels.map(([side, text, angle, radius]) => {
+    const isLeft = side === 'L';
+    const y = GEO.LABEL_Y[isLeft ? li++ : ri++];
+    if (y === undefined) return '';
+    const tipX  = isLeft ? GEO.LTIP  : GEO.RTIP;
+    const textX = isLeft ? GEO.LTEXT : GEO.RTEXT;
+    const anchor = isLeft ? 'end' : 'start';
+    const [ax, ay] = P(radius, angle);
+    return `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${tipX}" y2="${y - 4}" stroke="rgba(255,255,255,0.25)" stroke-width="0.7" stroke-dasharray="3 2"/>
+      <circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="1.8" fill="rgba(255,255,255,0.45)"/>
+      <text x="${textX}" y="${y}" text-anchor="${anchor}" fill="rgba(232,237,245,0.85)" font-size="12" font-family="monospace">${fitLabel(text)}</text>`;
+  }).join('');
+
+  return `<svg width="${GEO.W}" height="${GEO.H}" viewBox="0 0 ${GEO.W} ${GEO.H}" xmlns="http://www.w3.org/2000/svg">
+  ${shapes}
+  ${labelSVG}
+  <line x1="${GEO.cx - 45}" y1="${GEO.cy + GEO.R_MAX + 24}" x2="${GEO.cx + 45}" y2="${GEO.cy + GEO.R_MAX + 24}" stroke="rgba(255,255,255,.3)" stroke-width=".8"/>
+  <text x="${GEO.cx}" y="${GEO.cy + GEO.R_MAX + 42}" text-anchor="middle" fill="rgba(232,237,245,.5)" font-size="11" font-family="monospace">${shortDiameter(c.diameter) || '~100 nm'}</text>
+</svg>`;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Backend invariants: architecture normalisation, dimensional
+      # reconciliation, cited-only references, NCBI rate limiting.
+      - name: Backend tests
+        run: python tests/test_app.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Structural invariants for the seven topologies. A syntax check is not
+      # enough here — these execute the real render path against a DOM shim.
+      - name: Render tests
+        run: node tests/test_render.js
+
+      # The app must import and serve under the production server, not just
+      # under `flask run`.
+      - name: Smoke test under gunicorn
+        run: |
+          gunicorn --workers 1 --threads 4 --timeout 60 --bind 127.0.0.1:5000 app:app &
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:5000/health > /dev/null && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:5000/health
+          curl -sf http://127.0.0.1:5000/ > /dev/null
+          echo "gunicorn smoke test OK"
